@@ -459,37 +459,49 @@
   /* ---------- phone audio: mic capture + spoken replies (remote only) ---------- */
   const micBtn = document.getElementById('mic');
   let audioCtx = null, micStream = null, micSrc = null, micNode = null, micMute = null;
-  let chunks = [], recording = false;
+  let handsFree = false, capturing = false;
+  let vadChunks = [], preRoll = [], voicedBufs = 0, silentBufs = 0, ttsTailUntil = 0;
+  // ScriptProcessor buffers are 4096 samples (~85ms at 48kHz); counts below are in buffers
+  const VAD_START = 0.015, VAD_END = 0.010;   // RMS thresholds (phone AGC keeps speech well above)
+  const START_BUFS = 2, END_BUFS = 11, PREROLL_BUFS = 3;
   function ensureCtx() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
   }
-  async function startRec() {
-    const ctx = ensureCtx();
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    micSrc = ctx.createMediaStreamSource(micStream);
-    micNode = ctx.createScriptProcessor(4096, 1, 1);
-    micMute = ctx.createGain(); micMute.gain.value = 0;  // keeps the mic off the speaker
-    chunks = [];
-    micNode.onaudioprocess = (e) => { if (recording) chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
-    micSrc.connect(micNode); micNode.connect(micMute); micMute.connect(ctx.destination);
-    recording = true;
-    micBtn.classList.add('rec'); micBtn.innerHTML = '&#9632;&nbsp;SEND';
-    hintEl.textContent = 'RECORDING — TAP SEND WHEN DONE';
+  function resetVad() { capturing = false; vadChunks = []; preRoll = []; voicedBufs = 0; silentBufs = 0; }
+  function onAudio(e) {
+    if (!handsFree) return;
+    if (ttsPlaying || performance.now() < ttsTailUntil) { resetVad(); return; }  // don't hear our own replies
+    const buf = new Float32Array(e.inputBuffer.getChannelData(0));
+    let sum = 0; for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    const rms = Math.sqrt(sum / buf.length);
+    micLevel = Math.min(1, rms * 10);
+    if (!capturing) {
+      preRoll.push(buf); if (preRoll.length > PREROLL_BUFS) preRoll.shift();
+      voicedBufs = rms > VAD_START ? voicedBufs + 1 : 0;
+      if (voicedBufs >= START_BUFS) {
+        capturing = true; silentBufs = 0;
+        vadChunks = preRoll; preRoll = [];   // keep the pre-roll so the first word isn't clipped
+        hintEl.textContent = 'HEARING YOU…';
+      }
+    } else {
+      vadChunks.push(buf);
+      silentBufs = rms < VAD_END ? silentBufs + 1 : 0;
+      if (silentBufs >= END_BUFS) {
+        const done = vadChunks;
+        resetVad();
+        sendUtterance(done);
+      }
+    }
   }
-  function stopRec() {
-    recording = false;
-    micBtn.classList.remove('rec'); micBtn.innerHTML = '&#9679;&nbsp;MIC';
-    try { micNode.disconnect(); micSrc.disconnect(); micMute.disconnect(); } catch {}
-    if (micStream) micStream.getTracks().forEach(t => t.stop());
+  function sendUtterance(bufs) {
     const sr = audioCtx.sampleRate;
-    const len = chunks.reduce((n, c) => n + c.length, 0);
+    const len = bufs.reduce((n, c) => n + c.length, 0);
     const all = new Float32Array(len);
-    let off = 0; for (const c of chunks) { all.set(c, off); off += c.length; }
-    chunks = [];
+    let off = 0; for (const c of bufs) { all.set(c, off); off += c.length; }
     const ratio = sr / 16000, outLen = Math.floor(all.length / ratio);
-    if (outLen < 16000 * 0.4) { hintEl.textContent = 'TOO SHORT — TRY AGAIN'; return; }
+    if (outLen < 16000 * 0.4) { hintEl.textContent = 'LISTENING — JUST TALK'; return; }  // cough / noise blip
     const pcm = new Int16Array(outLen);
     for (let i = 0; i < outLen; i++) pcm[i] = Math.max(-1, Math.min(1, all[Math.floor(i * ratio)])) * 0x7fff;
     const bytes = new Uint8Array(pcm.buffer);
@@ -497,13 +509,34 @@
     for (let i = 0; i < bytes.length; i += 0x8000)
       bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
     send({ type: 'utterance', audio: btoa(bin) });
-    hintEl.textContent = 'SENT — WORKING ON IT';
+    hintEl.textContent = 'SENT — STILL LISTENING';
+  }
+  async function startHandsFree() {
+    const ctx = ensureCtx();
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micSrc = ctx.createMediaStreamSource(micStream);
+    micNode = ctx.createScriptProcessor(4096, 1, 1);
+    micMute = ctx.createGain(); micMute.gain.value = 0;  // keeps the mic off the speaker
+    micNode.onaudioprocess = onAudio;
+    micSrc.connect(micNode); micNode.connect(micMute); micMute.connect(ctx.destination);
+    resetVad();
+    handsFree = true;
+    micBtn.classList.add('rec'); micBtn.innerHTML = '&#9632;&nbsp;MIC ON';
+    hintEl.textContent = 'LISTENING — JUST TALK';
+  }
+  function stopHandsFree() {
+    handsFree = false;
+    resetVad();
+    try { micNode.disconnect(); micSrc.disconnect(); micMute.disconnect(); } catch {}
+    if (micStream) micStream.getTracks().forEach(t => t.stop());
+    micBtn.classList.remove('rec'); micBtn.innerHTML = '&#9679;&nbsp;MIC';
+    hintEl.textContent = 'MIC OFF — TAP TO LISTEN';
   }
   if (REMOTE) {
     micBtn.style.display = '';
     micBtn.addEventListener('click', () => {
-      if (recording) stopRec();
-      else startRec().catch(e => { hintEl.textContent = 'MIC BLOCKED — ' + e.name; });
+      if (handsFree) stopHandsFree();
+      else startHandsFree().catch(e => { hintEl.textContent = 'MIC BLOCKED — ' + e.name; });
     });
   }
   const ttsQueue = [];
@@ -526,6 +559,7 @@
       } catch (e) { console.warn('tts', e); }
     }
     ttsPlaying = false;
+    ttsTailUntil = performance.now() + 500;  // let the speaker's echo die before VAD resumes
   }
 
   /* ---------- model buttons ---------- */
