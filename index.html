@@ -45,7 +45,15 @@
   .vignette { position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 220px rgba(0,0,0,.9); }
 
   /* ---------- layout ---------- */
-  .stage { position: relative; height: 100vh; height: 100dvh; display: grid; grid-template-rows: auto 1fr minmax(150px, 28vh); }
+  .stage {
+    position: relative; height: 100vh; height: 100dvh;
+    display: grid;
+    grid-template-columns: minmax(225px, 285px) 1fr minmax(235px, 300px);
+    grid-template-rows: auto 1fr minmax(150px, 26vh);
+  }
+  header { grid-column: 1 / -1; position: relative; z-index: 80; }
+  .core-wrap { grid-column: 2; grid-row: 2; }
+  .transcript-wrap { grid-column: 1 / -1; grid-row: 3; }
 
   /* ---------- top bar ---------- */
   header {
@@ -74,7 +82,7 @@
   .status-pill.thinking  { color: #170b02; background: var(--amber); border-color: rgba(255,180,84,.4); box-shadow: 0 0 24px rgba(255,180,84,.35); }
   .status-pill.speaking  { color: #120a24; background: var(--violet); border-color: rgba(157,123,255,.4); box-shadow: 0 0 24px rgba(157,123,255,.35); }
 
-  /* ---------- model switch ---------- */
+  /* ---------- model switch + sys toggle ---------- */
   .model-switch {
     display: flex; border: 1px solid var(--line); border-radius: 2px; overflow: hidden;
     background: rgba(0, 212, 255, .04);
@@ -88,16 +96,114 @@
   .model-btn:hover { color: var(--cyan); background: rgba(0,212,255,.08); }
   .model-btn.active { color: #031018; background: var(--cyan); box-shadow: 0 0 18px var(--cyan-dim); }
   .model-btn.active.local { background: var(--green); box-shadow: 0 0 18px rgba(125,255,176,.4); }
+  #btnSys {
+    display: none;
+    font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 2px;
+    padding: 8px 14px; border: 1px solid var(--line); border-radius: 2px; cursor: pointer;
+    color: var(--cyan); background: rgba(0, 212, 255, .06); transition: all .25s;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  }
+  body.sys-open #btnSys { color: #031018; background: var(--cyan); box-shadow: 0 0 18px var(--cyan-dim); }
+
+  /* ---------- side panels ---------- */
+  .asides { display: contents; }
+  aside { grid-row: 2; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; }
+  aside.left  { grid-column: 1; padding-right: 4px; }
+  aside.right { grid-column: 3; padding-left: 4px; }
+  .panel {
+    border: 1px solid var(--line); background: var(--panel);
+    backdrop-filter: blur(6px); padding: 12px 14px; flex-shrink: 0;
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+    animation: holo-in .6s ease both;
+  }
+  aside .panel:nth-child(2) { animation-delay: .18s; }
+  .panel.grow { flex: 1 1 auto; min-height: 120px; display: flex; flex-direction: column; }
+  @keyframes holo-in {
+    0% { opacity: 0; transform: translateY(8px); }
+    55% { opacity: .8; } 65% { opacity: .35; }
+    100% { opacity: 1; transform: none; }
+  }
+  .panel-title {
+    font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 3px;
+    color: rgba(0,212,255,.6); display: flex; justify-content: space-between; align-items: baseline;
+    padding-bottom: 7px; margin-bottom: 10px; border-bottom: 1px solid var(--line);
+  }
+  .panel-title .count { color: var(--green); font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
+
+  /* system flow diagram */
+  #diag { width: 100%; height: auto; display: block; }
+  #diag .link { stroke: rgba(0,212,255,.22); stroke-width: 1.2; fill: none; }
+  #diag .link.flow {
+    stroke: var(--cyan); stroke-dasharray: 5 5;
+    animation: dashflow .5s linear infinite;
+    filter: drop-shadow(0 0 3px rgba(0,212,255,.55));
+  }
+  @keyframes dashflow { to { stroke-dashoffset: -10; } }
+  #diag .node rect { fill: rgba(0,212,255,.04); stroke: rgba(0,212,255,.3); }
+  #diag .node text {
+    fill: rgba(207,239,255,.72); font-family: 'Orbitron', sans-serif;
+    font-size: 9.5px; letter-spacing: 1px; text-anchor: middle; dominant-baseline: central;
+  }
+  #diag .node.tool text { font-size: 7.5px; letter-spacing: .5px; }
+  #diag .node.on rect { stroke: var(--cyan); fill: rgba(0,212,255,.15); }
+  #diag .node.on { filter: drop-shadow(0 0 5px rgba(0,212,255,.45)); }
+  #diag .node.on text { fill: #eafcff; }
+  #diag .node.brain rect { stroke: var(--green); }
+  #diag .node.flash rect { stroke: var(--amber); fill: rgba(255,180,84,.15); }
+  #diag .node.flash { filter: drop-shadow(0 0 6px rgba(255,180,84,.5)); }
+  #diag .node.flash text { fill: #fff2df; }
+  #diag .buslabel { fill: rgba(0,212,255,.4); font-family: 'JetBrains Mono', monospace; font-size: 6.5px; letter-spacing: 1px; }
+
+  /* subsystems */
+  .subsys { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px; color: rgba(207,239,255,.75); }
+  .subsys div { display: flex; align-items: center; padding: 4px 0; }
+  .subsys i {
+    width: 5px; height: 5px; border-radius: 50%; background: var(--green);
+    box-shadow: 0 0 6px rgba(125,255,176,.8); margin-right: 9px; flex-shrink: 0;
+    animation: blip 2.6s ease-in-out infinite;
+  }
+  .subsys div:nth-child(2) i { animation-delay: .6s; }
+  .subsys div:nth-child(3) i { animation-delay: 1.2s; }
+  .subsys div:nth-child(4) i { animation-delay: 1.8s; }
+  @keyframes blip { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  .subsys b { color: #eafcff; font-weight: 500; margin-left: 5px; }
+
+  /* telemetry */
+  .tele .t {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 1px;
+    padding: 5px 0; border-bottom: 1px dashed rgba(0,212,255,.12);
+  }
+  .tele .t:last-child { border-bottom: none; }
+  .tele .t span { color: rgba(207,239,255,.5); }
+  .tele .t b { color: #eafcff; font-weight: 500; }
+
+  /* evolution log */
+  .evo-list { overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; padding-right: 4px; }
+  .evo { padding: 5px 0 5px 10px; border-left: 2px solid rgba(0,212,255,.3); margin-bottom: 7px; }
+  .evo .d { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--amber); letter-spacing: 1px; }
+  .evo .m { font-size: 12.5px; line-height: 1.3; color: rgba(207,239,255,.85); font-weight: 500; }
+  .evo-empty { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(207,239,255,.35); letter-spacing: 2px; padding: 8px 0; }
 
   /* ---------- reactor ---------- */
   .core-wrap { position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; }
-  .reactor { position: relative; width: min(44vh, 80vw); height: min(44vh, 80vw); }
+  .reactor { position: relative; width: min(42vh, 86%); aspect-ratio: 1 / 1; max-height: 100%; }
   .reactor svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
   .ring { transform-origin: 50% 50%; }
   .spin-slow  { animation: spin 24s linear infinite; }
   .spin-rev   { animation: spin 14s linear infinite reverse; }
   .spin-fast  { animation: spin 6s  linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  .sweep {
+    position: absolute; inset: 5%; border-radius: 50%;
+    background: conic-gradient(from 0deg, rgba(0,212,255,.13) 0deg, transparent 60deg);
+    animation: spin 7s linear infinite;
+    mask-image: radial-gradient(circle, transparent 50%, black 56%, black 90%, transparent 96%);
+  }
+  .reactor.thinking .sweep { background: conic-gradient(from 0deg, rgba(255,180,84,.14) 0deg, transparent 60deg); animation-duration: 2.4s; }
+  .reactor.speaking .sweep { background: conic-gradient(from 0deg, rgba(157,123,255,.14) 0deg, transparent 60deg); }
+  .reactor.local .sweep    { background: conic-gradient(from 0deg, rgba(125,255,176,.12) 0deg, transparent 60deg); }
 
   .core-glow {
     position: absolute; inset: 31%; border-radius: 50%;
@@ -205,6 +311,21 @@
   #bootlog { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cyan); letter-spacing: 2px; height: 16px; }
 
   /* ---------- responsive ---------- */
+  @media (max-width: 1100px) {
+    .stage { grid-template-columns: 1fr; }
+    .core-wrap { grid-column: 1; }
+    .transcript-wrap { grid-column: 1; }
+    header { grid-column: 1; }
+    .reactor { width: min(44vh, 80vw); }
+    #btnSys { display: block; }
+    .asides { display: none; }
+    body.sys-open .asides {
+      display: block; position: fixed; inset: 0; z-index: 70;
+      background: rgba(2, 7, 15, .97); overflow-y: auto;
+      padding: 78px 16px 24px;
+    }
+    body.sys-open aside { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; overflow: visible; }
+  }
   @media (max-width: 760px) {
     .hud { display: none; }
     header { padding: 8px 14px; }
@@ -231,23 +352,86 @@
         <button class="model-btn active" id="btnCloud" data-target="cloud">CLOUD&nbsp;·&nbsp;CLAUDE</button>
         <button class="model-btn local" id="btnLocal" data-target="local">LOCAL&nbsp;·&nbsp;QWEN</button>
       </div>
+      <button id="btnSys" type="button">SYS</button>
       <div class="status-pill" id="status">BOOT</div>
     </div>
   </header>
 
+  <div class="asides" id="asides">
+    <aside class="left">
+      <section class="panel">
+        <div class="panel-title">SYSTEM FLOW</div>
+        <svg id="diag" viewBox="0 0 280 280">
+          <path id="l-you"   class="link" d="M70,42 V78"/>
+          <path id="l-phone" class="link" d="M210,42 V78"/>
+          <text class="buslabel" x="218" y="63">TUNNEL</text>
+          <path id="l-cloud" class="link" d="M100,116 L70,152"/>
+          <path id="l-local" class="link" d="M180,116 L210,152"/>
+          <path class="link" d="M70,184 V212"/>
+          <path class="link" d="M210,184 V212"/>
+          <path class="link" d="M20,212 H260"/>
+          <path id="ld-spotify"  class="link" d="M40,212 V238"/>
+          <path id="ld-browser"  class="link" d="M107,212 V238"/>
+          <path id="ld-telegram" class="link" d="M173,212 V238"/>
+          <path id="ld-vault"    class="link" d="M240,212 V238"/>
+          <text class="buslabel" x="22" y="207">TOOL BUS</text>
+
+          <g class="node" id="n-you"><rect x="15" y="10" width="110" height="32"/><text x="70" y="26">YOU · MIC</text></g>
+          <g class="node" id="n-phone"><rect x="155" y="10" width="110" height="32"/><text x="210" y="26">PHONE HUD</text></g>
+          <g class="node" id="n-hub"><rect x="65" y="78" width="150" height="38"/><text x="140" y="97">ALFRED CORE</text></g>
+          <g class="node" id="n-cloud"><rect x="15" y="152" width="110" height="32"/><text x="70" y="168">CLOUD · CLAUDE</text></g>
+          <g class="node" id="n-local"><rect x="155" y="152" width="110" height="32"/><text x="210" y="168">LOCAL · QWEN</text></g>
+          <g class="node tool" id="n-spotify"><rect x="11" y="238" width="58" height="26"/><text x="40" y="251">SPOTIFY</text></g>
+          <g class="node tool" id="n-browser"><rect x="78" y="238" width="58" height="26"/><text x="107" y="251">BROWSER</text></g>
+          <g class="node tool" id="n-telegram"><rect x="144" y="238" width="58" height="26"/><text x="173" y="251">TELEGRAM</text></g>
+          <g class="node tool" id="n-vault"><rect x="211" y="238" width="58" height="26"/><text x="240" y="251">VAULT</text></g>
+        </svg>
+      </section>
+      <section class="panel">
+        <div class="panel-title">SUBSYSTEMS</div>
+        <div class="subsys">
+          <div><i></i>STT · WHISPER GPU</div>
+          <div><i></i>TTS · EDGE RYAN</div>
+          <div><i></i>BRAIN · <b id="brainLabel">CLAUDE</b></div>
+          <div><i></i><span id="connState">LINK · OFFLINE</span></div>
+        </div>
+      </section>
+    </aside>
+
+    <aside class="right">
+      <section class="panel">
+        <div class="panel-title">TELEMETRY</div>
+        <div class="tele">
+          <div class="t"><span>UPTIME</span><b id="uptime">—</b></div>
+          <div class="t"><span>LAST REPLY</span><b id="lat">—</b></div>
+          <div class="t"><span>TURNS</span><b id="turns">0</b></div>
+          <div class="t"><span>VAULT</span><b>D:\ALFRED</b></div>
+        </div>
+      </section>
+      <section class="panel grow">
+        <div class="panel-title">EVOLUTION LOG <span class="count" id="evoCount"></span></div>
+        <div class="evo-list" id="evoList"><div class="evo-empty">AWAITING LINK…</div></div>
+      </section>
+    </aside>
+  </div>
+
   <div class="core-wrap">
-    <div class="hud tl"><div class="readout" id="core">CORE&nbsp;v3.1<br>STT&nbsp;·&nbsp;WHISPER&nbsp;GPU<br>TTS&nbsp;·&nbsp;EDGE<br>BRAIN&nbsp;·&nbsp;<b id="brainLabel">CLAUDE</b><br>MODE&nbsp;·&nbsp;DUPLEX</div></div>
-    <div class="hud tr"><div class="readout"><span id="connState">LINK&nbsp;·&nbsp;OFFLINE</span><br>VAULT&nbsp;·&nbsp;D:\ALFRED<br>LAST&nbsp;·&nbsp;<span id="lat">—</span></div></div>
+    <div class="hud tl"><div class="readout">CORE&nbsp;v4.0<br>MODE&nbsp;·&nbsp;DUPLEX<br>SEC&nbsp;·&nbsp;KEYGATE</div></div>
+    <div class="hud tr"><div class="readout">GRID&nbsp;·&nbsp;ONLINE<br>NET&nbsp;·&nbsp;CF&nbsp;TUNNEL<br>PWR&nbsp;·&nbsp;NOMINAL</div></div>
 
     <div class="reactor" id="reactor">
+      <div class="sweep"></div>
       <svg viewBox="0 0 400 400">
         <g class="ring spin-slow" stroke="var(--cyan)" fill="none" opacity=".8">
+          <circle cx="200" cy="200" r="196" stroke-width="9" stroke-dasharray="1.5 8.8" opacity=".22"/>
           <circle cx="200" cy="200" r="188" stroke-width="1" stroke-dasharray="4 10" opacity=".5"/>
           <circle cx="200" cy="200" r="172" stroke-width="2" stroke-dasharray="60 26 12 26" opacity=".65"/>
         </g>
         <g class="ring spin-rev" stroke="var(--cyan)" fill="none">
           <circle cx="200" cy="200" r="150" stroke-width="1.5" stroke-dasharray="110 40 8 40" opacity=".55"/>
           <circle cx="200" cy="200" r="138" stroke-width="6" stroke-dasharray="2 14" opacity=".35"/>
+          <circle cx="200" cy="38" r="3" fill="var(--cyan)" stroke="none" opacity=".9"/>
+          <circle cx="200" cy="362" r="3" fill="var(--cyan)" stroke="none" opacity=".9"/>
         </g>
         <g class="ring spin-fast" stroke="var(--blue)" fill="none">
           <circle cx="200" cy="200" r="118" stroke-width="2.5" stroke-dasharray="180 260" opacity=".8" stroke-linecap="round"/>
@@ -297,6 +481,11 @@
   const btnCloud = document.getElementById('btnCloud');
   const btnLocal = document.getElementById('btnLocal');
   const stopBtn = document.getElementById('stop');
+  const uptimeEl = document.getElementById('uptime');
+  const turnsEl = document.getElementById('turns');
+  const evoList = document.getElementById('evoList');
+  const evoCount = document.getElementById('evoCount');
+  const N = id => document.getElementById(id);
 
   /* ---------- clock ---------- */
   const clock = document.getElementById('clock');
@@ -322,6 +511,7 @@
                        : s === 'thinking'  ? 'WORKING — KEEP TALKING TO STEER'
                        : s === 'speaking'  ? 'REPLYING — SPEAK TO CUT HIM OFF'
                        : 'JUST SPEAK — F9 PUSH-TO-TALK';
+    updateDiagram();
   }
   setInterval(() => {
     if (state === 'thinking' && thinkingSince) {
@@ -331,6 +521,7 @@
   function setActivity(text) {
     activityEl.textContent = text || '';
     activityEl.classList.toggle('on', !!text);
+    if (text) flashTool(text);
   }
   function setModel(m) {
     model = m;
@@ -339,13 +530,81 @@
     brainLabel.textContent = m === 'cloud' ? 'CLAUDE' : 'QWEN LOCAL';
     latEl.textContent = '—';
     applyReactorClass();
+    N('n-cloud').classList.toggle('brain', m === 'cloud');
+    N('n-local').classList.toggle('brain', m === 'local');
+    updateDiagram();
   }
 
+  /* ---------- system flow diagram ---------- */
+  function updateDiagram() {
+    ['n-you', 'n-phone', 'n-cloud', 'n-local'].forEach(id => N(id).classList.remove('on'));
+    ['l-you', 'l-phone', 'l-cloud', 'l-local'].forEach(id => N(id).classList.remove('flow'));
+    N('n-hub').classList.add('on');  // the core is always lit
+    const brainN = model === 'local' ? 'n-local' : 'n-cloud';
+    const brainL = model === 'local' ? 'l-local' : 'l-cloud';
+    if (state === 'listening') {
+      N('n-you').classList.add('on'); N('l-you').classList.add('flow');
+      if (typeof REMOTE !== 'undefined' && REMOTE) { N('n-phone').classList.add('on'); N('l-phone').classList.add('flow'); }
+    } else if (state === 'thinking') {
+      N(brainN).classList.add('on'); N(brainL).classList.add('flow');
+    } else if (state === 'speaking') {
+      N('n-you').classList.add('on'); N('l-you').classList.add('flow');
+      N(brainN).classList.add('on');
+      if (typeof REMOTE !== 'undefined' && REMOTE) { N('n-phone').classList.add('on'); N('l-phone').classList.add('flow'); }
+    }
+  }
+  const TOOL_PAT = [
+    [/spotify|music|play|song|track|volume|playlist/i, 'spotify'],
+    [/browser|web|search|page|url|site|google|open/i, 'browser'],
+    [/telegram|message/i, 'telegram'],
+    [/vault|note|memor|file|read|writ|edit|daily|folder/i, 'vault'],
+  ];
+  const flashTimers = {};
+  function flashTool(text) {
+    for (const [re, t] of TOOL_PAT) {
+      if (!re.test(text)) continue;
+      N('n-' + t).classList.add('flash');
+      N('ld-' + t).classList.add('flow');
+      clearTimeout(flashTimers[t]);
+      flashTimers[t] = setTimeout(() => {
+        N('n-' + t).classList.remove('flash');
+        N('ld-' + t).classList.remove('flow');
+      }, 2500);
+      break;
+    }
+  }
+
+  /* ---------- telemetry: uptime + evolution log ---------- */
+  let startedEpoch = null;
+  setInterval(() => {
+    if (!startedEpoch) return;
+    let s = Math.max(0, Math.floor((Date.now() - startedEpoch) / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    uptimeEl.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  }, 1000);
+  function applySysinfo(info) {
+    if (info.started) startedEpoch = info.started * 1000;
+    const evos = info.evolutions || [];
+    evoCount.textContent = evos.length ? 'x' + evos.length : '';
+    evoList.innerHTML = '';
+    if (!evos.length) { evoList.innerHTML = '<div class="evo-empty">NO EVOLUTIONS LOGGED</div>'; return; }
+    for (const e of evos) {
+      const div = document.createElement('div');
+      div.className = 'evo';
+      div.innerHTML = '<div class="d"></div><div class="m"></div>';
+      div.querySelector('.d').textContent = e.date;
+      div.querySelector('.m').textContent = e.msg;
+      evoList.appendChild(div);
+    }
+  }
+
+  let turns = 0;
   let stick = true;  // auto-scroll only while the user is at the bottom
   transcript.addEventListener('scroll', () => {
     stick = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 40;
   });
   function addLine(role, text) {
+    if (role === 'user') turnsEl.textContent = ++turns;
     const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const div = document.createElement('div');
     div.className = 'line ' + role;
@@ -355,6 +614,9 @@
     while (transcript.children.length > 60) transcript.removeChild(transcript.firstChild);
     if (stick) transcript.scrollTop = transcript.scrollHeight;
   }
+
+  /* ---------- sys drawer (mobile) ---------- */
+  document.getElementById('btnSys').addEventListener('click', () => document.body.classList.toggle('sys-open'));
 
   /* ---------- waveform ring ---------- */
   const cv = document.getElementById('wave');
@@ -449,6 +711,7 @@
       if (msg.type === 'level') micLevel = msg.value;
       if (msg.type === 'latency') latEl.textContent = msg.value + 's';
       if (msg.type === 'activity') setActivity(msg.text);
+      if (msg.type === 'sysinfo') applySysinfo(msg);
       if (msg.type === 'authfail') badKey = true;
       if (msg.type === 'tts') playTts(msg.data);
       if (msg.type === 'reload') location.reload();
@@ -456,7 +719,7 @@
   }
   connect();
 
-  /* ---------- phone audio: mic capture + spoken replies (remote only) ---------- */
+  /* ---------- phone audio: hands-free mic + spoken replies (remote only) ---------- */
   const micBtn = document.getElementById('mic');
   let audioCtx = null, micStream = null, micSrc = null, micNode = null, micMute = null;
   let handsFree = false, capturing = false;
@@ -589,7 +852,7 @@
   /* ---------- boot sequence ---------- */
   const bootEl = document.getElementById('boot');
   const bootlog = document.getElementById('bootlog');
-  const steps = ['INITIALIZING CORE', 'LOADING VAULT MEMORY', 'CALIBRATING AUDIO', 'ALFRED ONLINE'];
+  const steps = ['INITIALIZING ARC CORE', 'LINKING NEURAL BRIDGE', 'LOADING VAULT MEMORY', 'CALIBRATING AUDIO ARRAY', 'SYSTEMS NOMINAL — ALFRED ONLINE'];
   let i = 0;
   const bootTimer = setInterval(() => {
     bootlog.textContent = steps[i++] + '…';
@@ -597,7 +860,7 @@
       clearInterval(bootTimer);
       setTimeout(() => { bootEl.classList.add('done'); setState(serverState || 'idle'); }, 600);
     }
-  }, 550);
+  }, 500);
 })();
 </script>
 </body>
