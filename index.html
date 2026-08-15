@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ALFRED</title>
+<script>
+  // Warm start: a reload / reconnect never replays the boot animation (see #boot below).
+  try { if (sessionStorage.getItem('alfred_booted') === '1') document.documentElement.classList.add('warm'); } catch (e) {}
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -14,10 +18,12 @@
     --amber: #ffb454;
     --violet: #9d7bff;
     --green: #7dffb0;
+    --red: #ff5470;
     --bg: #02070f;
     --panel: rgba(4, 18, 34, .55);
     --line: rgba(0, 212, 255, .18);
     --text: #cfefff;
+    --fast: .12s;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
@@ -48,7 +54,7 @@
   .stage {
     position: relative; height: 100vh; height: 100dvh;
     display: grid;
-    grid-template-columns: minmax(225px, 285px) 1fr minmax(235px, 300px);
+    grid-template-columns: minmax(225px, 285px) 1fr minmax(250px, 320px);
     grid-template-rows: auto 1fr minmax(150px, 26vh);
   }
   header { grid-column: 1 / -1; position: relative; z-index: 80; }
@@ -58,7 +64,7 @@
   /* ---------- top bar ---------- */
   header {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    padding: 10px 28px; border-bottom: 1px solid var(--line);
+    padding: 8px 28px; border-bottom: 1px solid var(--line);
     background: linear-gradient(180deg, rgba(2,10,20,.85), transparent);
     flex-wrap: wrap;
   }
@@ -71,18 +77,37 @@
   .wordmark small { font-size: 9px; letter-spacing: 4px; color: var(--cyan); vertical-align: middle; margin-left: 10px; font-weight: 500; }
   .top-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
   .clock { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--cyan); letter-spacing: 2px; }
+  .status-group { display: flex; align-items: center; gap: 8px; }
   .status-pill {
     font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px;
     padding: 7px 16px; border: 1px solid var(--line); border-radius: 2px;
     color: var(--cyan); background: rgba(0, 212, 255, .06);
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-    transition: all .3s;
+    transition: color var(--fast), background var(--fast), box-shadow var(--fast), border-color var(--fast);
+    min-width: 96px; text-align: center;
   }
   .status-pill.listening { color: #031018; background: var(--cyan); box-shadow: 0 0 24px var(--cyan-dim); }
   .status-pill.thinking  { color: #170b02; background: var(--amber); border-color: rgba(255,180,84,.4); box-shadow: 0 0 24px rgba(255,180,84,.35); }
   .status-pill.speaking  { color: #120a24; background: var(--violet); border-color: rgba(157,123,255,.4); box-shadow: 0 0 24px rgba(157,123,255,.35); }
+  .status-pill.offline   { color: #ff9aa8; border-color: rgba(255,84,112,.45); background: rgba(255,84,112,.08); }
 
-  /* ---------- model switch + sys toggle ---------- */
+  /* ACTIVE BRAIN badge — what took the current/last turn (from `model`), NOT the pin */
+  .active-badge {
+    font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 2px;
+    padding: 7px 12px; border: 1px solid rgba(0,212,255,.35); border-radius: 2px;
+    color: var(--cyan); background: rgba(0, 212, 255, .06); white-space: nowrap;
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+    transition: color var(--fast), background var(--fast), border-color var(--fast);
+  }
+  .active-badge small { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1px; opacity: .55; margin-right: 6px; font-weight: 400; }
+  .active-badge.local { color: var(--green); border-color: rgba(125,255,176,.4); background: rgba(125,255,176,.07); }
+  .active-badge.floating { border-style: dashed; }   /* pin = AUTO: this may flip every turn */
+
+  /* ---------- BRAIN PIN (the only way to switch brains) + sys toggle ---------- */
+  .pin-group { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .pin-label { font-family: 'Orbitron', sans-serif; font-size: 8px; font-weight: 700; letter-spacing: 3px; color: rgba(0,212,255,.55); }
+  .pin-label kbd { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 400; letter-spacing: 0; color: rgba(207,239,255,.35); margin-left: 8px; }
+  .pin-hint { font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1.5px; color: rgba(255,180,84,.62); white-space: nowrap; }
   .model-switch {
     display: flex; border: 1px solid var(--line); border-radius: 2px; overflow: hidden;
     background: rgba(0, 212, 255, .04);
@@ -91,16 +116,21 @@
     font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 2px;
     padding: 8px 14px; border: none; cursor: pointer;
     color: rgba(207,239,255,.55); background: transparent;
-    transition: all .25s; white-space: nowrap;
+    transition: color var(--fast), background var(--fast), box-shadow var(--fast); white-space: nowrap;
   }
   .model-btn:hover { color: var(--cyan); background: rgba(0,212,255,.08); }
-  .model-btn.active { color: #031018; background: var(--cyan); box-shadow: 0 0 18px var(--cyan-dim); }
-  .model-btn.active.local { background: var(--green); box-shadow: 0 0 18px rgba(125,255,176,.4); }
+  .model-btn:focus-visible { outline: 1px solid var(--cyan); outline-offset: -1px; }
+  /* three distinct colours: AUTO must never look like CLAUDE or QWEN */
+  .model-btn.active.auto  { color: #120a24; background: var(--violet); box-shadow: 0 0 18px rgba(157,123,255,.45); }
+  .model-btn.active.cloud { color: #031018; background: var(--cyan);   box-shadow: 0 0 18px var(--cyan-dim); }
+  .model-btn.active.local { color: #031018; background: var(--green);  box-shadow: 0 0 18px rgba(125,255,176,.4); }
+  .model-btn.pending { animation: pend .5s ease-in-out infinite; }
+  @keyframes pend { 0%,100% { filter: brightness(1); } 50% { filter: brightness(.7); } }
   #btnSys {
     display: none;
     font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 2px;
     padding: 8px 14px; border: 1px solid var(--line); border-radius: 2px; cursor: pointer;
-    color: var(--cyan); background: rgba(0, 212, 255, .06); transition: all .25s;
+    color: var(--cyan); background: rgba(0, 212, 255, .06); transition: all var(--fast);
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
   }
   body.sys-open #btnSys { color: #031018; background: var(--cyan); box-shadow: 0 0 18px var(--cyan-dim); }
@@ -114,13 +144,17 @@
     border: 1px solid var(--line); background: var(--panel);
     backdrop-filter: blur(6px); padding: 12px 14px; flex-shrink: 0;
     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
-    animation: holo-in .6s ease both;
+    animation: holo-in .35s ease both;
   }
-  aside .panel:nth-child(2) { animation-delay: .18s; }
+  html.warm .panel { animation: none; }
+  aside .panel:nth-child(2) { animation-delay: .08s; }
+  aside .panel:nth-child(3) { animation-delay: .16s; }
   .panel.grow { flex: 1 1 auto; min-height: 120px; display: flex; flex-direction: column; }
+  .panel.tasks-panel { flex: 2 1 auto; min-height: 150px; }
+  .panel.evo-panel { flex: 0 1 auto; max-height: 22vh; min-height: 64px; display: flex; flex-direction: column; }
   @keyframes holo-in {
-    0% { opacity: 0; transform: translateY(8px); }
-    55% { opacity: .8; } 65% { opacity: .35; }
+    0% { opacity: 0; transform: translateY(6px); }
+    60% { opacity: .75; } 70% { opacity: .4; }
     100% { opacity: 1; transform: none; }
   }
   .panel-title {
@@ -129,9 +163,10 @@
     padding-bottom: 7px; margin-bottom: 10px; border-bottom: 1px solid var(--line);
   }
   .panel-title .count { color: var(--green); font-family: 'JetBrains Mono', monospace; letter-spacing: 1px; }
+  .panel-title .count.hot { color: var(--cyan); text-shadow: 0 0 8px var(--cyan-dim); }
 
   /* system flow diagram */
-  #diag { width: 100%; height: auto; display: block; }
+  #diag { width: 100%; height: auto; max-height: 27vh; display: block; }
   #diag .link { stroke: rgba(0,212,255,.22); stroke-width: 1.2; fill: none; }
   #diag .link.flow {
     stroke: var(--cyan); stroke-dasharray: 5 5;
@@ -149,49 +184,127 @@
   #diag .node.on { filter: drop-shadow(0 0 5px rgba(0,212,255,.45)); }
   #diag .node.on text { fill: #eafcff; }
   #diag .node.brain rect { stroke: var(--green); }
+  #diag .node.down rect { stroke: rgba(255,84,112,.6); stroke-dasharray: 3 3; }
   #diag .node.flash rect { stroke: var(--amber); fill: rgba(255,180,84,.15); }
   #diag .node.flash { filter: drop-shadow(0 0 6px rgba(255,180,84,.5)); }
   #diag .node.flash text { fill: #fff2df; }
   #diag .buslabel { fill: rgba(0,212,255,.4); font-family: 'JetBrains Mono', monospace; font-size: 6.5px; letter-spacing: 1px; }
 
-  /* subsystems */
+  /* subsystems — LIVE from `health`; dot colours are real probe results */
   .subsys { font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px; color: rgba(207,239,255,.75); }
-  .subsys div { display: flex; align-items: center; padding: 4px 0; }
+  .subsys div { display: flex; align-items: center; padding: 2.5px 0; white-space: nowrap; }
   .subsys i {
-    width: 5px; height: 5px; border-radius: 50%; background: var(--green);
-    box-shadow: 0 0 6px rgba(125,255,176,.8); margin-right: 9px; flex-shrink: 0;
-    animation: blip 2.6s ease-in-out infinite;
+    width: 6px; height: 6px; border-radius: 50%; margin-right: 9px; flex-shrink: 0;
+    background: rgba(207,239,255,.18); transition: background var(--fast), box-shadow var(--fast);
   }
-  .subsys div:nth-child(2) i { animation-delay: .6s; }
-  .subsys div:nth-child(3) i { animation-delay: 1.2s; }
-  .subsys div:nth-child(4) i { animation-delay: 1.8s; }
-  @keyframes blip { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
-  .subsys b { color: #eafcff; font-weight: 500; margin-left: 5px; }
+  .subsys i.ok   { background: var(--green); box-shadow: 0 0 6px rgba(125,255,176,.8); }
+  .subsys i.warn { background: var(--amber); box-shadow: 0 0 6px rgba(255,180,84,.8); }
+  .subsys i.bad  { background: var(--red);   box-shadow: 0 0 6px rgba(255,84,112,.8); }
+  .subsys i.unk  { background: rgba(207,239,255,.18); }
+  .subsys b { color: #eafcff; font-weight: 500; margin-left: 5px; overflow: hidden; text-overflow: ellipsis; }
+  .subsys b.bad { color: #ff9aa8; }
+  .subsys b.dim { color: rgba(207,239,255,.4); }
 
-  /* telemetry */
+  /* telemetry + latency breakdown */
   .tele .t {
     display: flex; justify-content: space-between; align-items: baseline;
     font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 1px;
-    padding: 5px 0; border-bottom: 1px dashed rgba(0,212,255,.12);
+    padding: 4px 0; border-bottom: 1px dashed rgba(0,212,255,.12);
   }
-  .tele .t:last-child { border-bottom: none; }
   .tele .t span { color: rgba(207,239,255,.5); }
   .tele .t b { color: #eafcff; font-weight: 500; }
+  .tele .t b.ok { color: var(--green); } .tele .t b.warn { color: var(--amber); } .tele .t b.bad { color: var(--red); }
+  .tele .t b .tag { margin-left: 8px; vertical-align: 1px; }
+  .lat { padding-top: 7px; }
+  .lat-bar { position: relative; display: flex; height: 8px; background: rgba(0,212,255,.07); border: 1px solid rgba(0,212,255,.15); overflow: hidden; }
+  .lat-bar i { display: block; height: 100%; width: 0; transition: width .18s ease; }
+  .lat-bar i.stt   { background: var(--cyan); }
+  .lat-bar i.route { background: var(--amber); }
+  .lat-bar i.ttfw  { background: var(--violet); }
+  .lat-bar i.rest  { background: rgba(207,239,255,.14); }
+  .lat-bar em { position: absolute; top: -1px; bottom: -1px; width: 1px; background: #fff; opacity: 0; box-shadow: 0 0 6px #fff; }
+  .lat-bar em.on { opacity: .9; }
+  .lat-legend { display: flex; justify-content: space-between; gap: 6px; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 1px; color: rgba(207,239,255,.5); }
+  .lat-legend span::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; vertical-align: 0; }
+  .lat-legend .stt::before { background: var(--cyan); } .lat-legend .route::before { background: var(--amber); } .lat-legend .ttfw::before { background: var(--violet); }
+  .lat-legend b { color: #eafcff; font-weight: 500; margin-left: 3px; }
+  .lat-foot { display: flex; justify-content: space-between; margin-top: 5px; font-family: 'JetBrains Mono', monospace; font-size: 8px; letter-spacing: 1.5px; color: rgba(207,239,255,.32); }
+
+  /* brain tags (tasks, telemetry) */
+  .tag { font-family: 'Orbitron', sans-serif; font-size: 7.5px; font-weight: 700; letter-spacing: 1.5px; padding: 2px 5px; border: 1px solid; border-radius: 2px; white-space: nowrap; }
+  .tag.cloud { color: var(--cyan); border-color: rgba(0,212,255,.45); }
+  .tag.local { color: var(--green); border-color: rgba(125,255,176,.45); }
+
+  /* TASKS — the ledger; Alfred never forgets one */
+  .task-list { flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; padding-right: 4px; display: flex; flex-direction: column; gap: 6px; }
+  .task {
+    display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: start;
+    padding: 6px 8px 6px 7px; border-left: 2px solid rgba(0,212,255,.25); background: rgba(0,212,255,.03);
+    transition: opacity var(--fast), background var(--fast), border-color var(--fast);
+  }
+  .task .mark { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; background: rgba(207,239,255,.25); font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 8px; text-align: center; }
+  .task .txt { font-size: 12.5px; font-weight: 500; line-height: 1.3; color: rgba(207,239,255,.9); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  .task .meta { display: flex; align-items: center; gap: 7px; margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 8.5px; letter-spacing: 1px; color: rgba(207,239,255,.42); }
+  .task .right { text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px; color: #eafcff; white-space: nowrap; }
+  .task .right .st { display: block; font-family: 'Orbitron', sans-serif; font-size: 7.5px; font-weight: 700; letter-spacing: 1.5px; margin-top: 3px; color: rgba(207,239,255,.45); }
+  .task.running { border-left-color: var(--cyan); background: rgba(0,212,255,.08); }
+  .task.running .mark { background: var(--cyan); box-shadow: 0 0 8px var(--cyan); animation: tpulse 1s ease-in-out infinite; }
+  .task.running .right .st { color: var(--cyan); }
+  @keyframes tpulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.75); } }
+  .task.done { border-left-color: rgba(125,255,176,.45); opacity: .7; }
+  .task.done .mark { background: transparent; color: var(--green); }
+  .task.done .mark::before { content: '\2713'; }
+  .task.done .right .st { color: var(--green); }
+  .task.failed, .task.stopped { border-left-color: var(--red); background: rgba(255,84,112,.05); }
+  .task.failed .mark, .task.stopped .mark { background: transparent; color: var(--red); }
+  .task.failed .mark::before { content: '\2715'; }
+  .task.stopped .mark::before { content: '\25A0'; font-size: 9px; }
+  .task.failed .right .st, .task.stopped .right .st { color: var(--red); }
+  .task.interrupted { border-left-color: var(--amber); background: rgba(255,180,84,.06); }
+  .task.interrupted .mark { background: transparent; color: var(--amber); animation: spin 1.6s linear infinite; }
+  .task.interrupted .mark::before { content: '\21BB'; }
+  .task.interrupted .right .st { color: var(--amber); }
+  .task.abandoned { opacity: .38; border-left-color: rgba(207,239,255,.2); }
+  .task.abandoned .mark { background: transparent; color: rgba(207,239,255,.5); }
+  .task.abandoned .mark::before { content: '\2014'; }
+  .task .retry { color: var(--amber); }
+  .tasks-empty { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(207,239,255,.35); letter-spacing: 2px; padding: 8px 0; }
 
   /* evolution log */
   .evo-list { overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; padding-right: 4px; }
-  .evo { padding: 5px 0 5px 10px; border-left: 2px solid rgba(0,212,255,.3); margin-bottom: 7px; }
+  .evo { padding: 4px 0 4px 10px; border-left: 2px solid rgba(0,212,255,.3); margin-bottom: 6px; }
   .evo .d { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--amber); letter-spacing: 1px; }
-  .evo .m { font-size: 12.5px; line-height: 1.3; color: rgba(207,239,255,.85); font-weight: 500; }
+  .evo .m { font-size: 12px; line-height: 1.3; color: rgba(207,239,255,.85); font-weight: 500; }
   .evo-empty { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(207,239,255,.35); letter-spacing: 2px; padding: 8px 0; }
 
   /* ops feed — live log of every tool Alfred runs */
   .ops-list { flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; padding-right: 4px; font-family: 'JetBrains Mono', monospace; }
-  .op { display: flex; gap: 8px; padding: 3px 0; font-size: 10px; letter-spacing: .5px; animation: rise .3s ease both; }
+  .op { display: flex; gap: 8px; padding: 3px 0; font-size: 10px; letter-spacing: .5px; animation: rise .2s ease both; }
   .op .t { color: rgba(0,212,255,.45); flex-shrink: 0; }
   .op .w { color: rgba(207,239,255,.85); overflow-wrap: anywhere; }
   .op .w b { color: var(--amber); font-weight: 500; }
+  .op.sub .w { color: rgba(207,239,255,.6); }
   .ops-empty { font-size: 10px; color: rgba(207,239,255,.35); letter-spacing: 2px; padding: 8px 0; }
+
+  /* notice toasts — top-centre, transient, stack */
+  #toasts {
+    position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 95;
+    display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
+    width: min(620px, 92vw);
+  }
+  .toast {
+    pointer-events: auto; cursor: pointer; max-width: 100%;
+    font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1.5px; line-height: 1.4;
+    padding: 8px 18px; border: 1px solid rgba(0,212,255,.5); background: rgba(3, 14, 26, .95); color: #eafcff;
+    box-shadow: 0 0 22px rgba(0,212,255,.2); backdrop-filter: blur(4px);
+    clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+    animation: toast-in .12s ease both; transition: opacity .18s;
+  }
+  .toast.info::before { content: '\203A  '; color: var(--cyan); }
+  .toast.warn { border-color: rgba(255,180,84,.65); box-shadow: 0 0 22px rgba(255,180,84,.22); color: #fff2df; }
+  .toast.warn::before { content: '!  '; color: var(--amber); }
+  .toast.out { opacity: 0; }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 
   /* viewer overlay — pages Alfred pushes onto the HUD (diagrams, reports) */
   #viewer {
@@ -201,13 +314,13 @@
     box-shadow: 0 0 60px rgba(0,212,255,.18);
     clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
   }
-  body.viewer-open #viewer { display: flex; animation: holo-in .45s ease both; }
+  body.viewer-open #viewer { display: flex; animation: holo-in .3s ease both; }
   #viewer .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
   #viewer .vt { font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px; color: var(--cyan); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #viewerClose {
     font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 2px;
     padding: 6px 14px; border: 1px solid var(--line); border-radius: 2px; cursor: pointer;
-    color: var(--cyan); background: rgba(0,212,255,.06); transition: all .25s;
+    color: var(--cyan); background: rgba(0,212,255,.06); transition: all var(--fast);
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); white-space: nowrap;
   }
   #viewerClose:hover { color: #031018; background: var(--cyan); box-shadow: 0 0 18px var(--cyan-dim); }
@@ -221,7 +334,7 @@
     box-shadow: 0 0 40px rgba(0,212,255,.14); backdrop-filter: blur(4px);
     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
   }
-  body.cs-open #codestream { display: flex; animation: holo-in .35s ease both; }
+  body.cs-open #codestream { display: flex; animation: holo-in .25s ease both; }
   #codestream .cs-bar {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
     padding: 8px 12px; border-bottom: 1px solid var(--line); flex-shrink: 0;
@@ -230,8 +343,8 @@
   #codestream .cs-file { color: var(--cyan); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #codestream .cs-mode { color: var(--green); flex-shrink: 0; }
   #csBody { margin: 0; padding: 10px 12px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; line-height: 1.5; }
-  #csBody div { white-space: pre-wrap; word-break: break-all; opacity: 0; animation: cs-line .18s ease forwards; }
-  #csBody .del { color: #ff5470; }
+  #csBody div { white-space: pre-wrap; word-break: break-all; opacity: 0; animation: cs-line .15s ease forwards; }
+  #csBody .del { color: var(--red); }
   #csBody .add { color: var(--green); }
   #csBody .out { color: var(--cyan); opacity: .92; }
   @keyframes cs-line { to { opacity: 1; } }
@@ -261,7 +374,6 @@
     background: radial-gradient(circle, #eafcff 0%, var(--cyan) 28%, rgba(0,132,255,.5) 55%, transparent 72%);
     filter: blur(2px);
     animation: breathe 3.2s ease-in-out infinite;
-    transition: filter .3s;
   }
   @keyframes breathe { 0%,100% { transform: scale(.94); opacity: .85; } 50% { transform: scale(1.04); opacity: 1; } }
 
@@ -284,17 +396,20 @@
     font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1.5px;
     color: var(--amber); white-space: nowrap; max-width: 94vw;
     overflow: hidden; text-overflow: ellipsis;
-    opacity: 0; transition: opacity .2s;
+    opacity: 0; transition: opacity var(--fast);
   }
   .activity.on { opacity: .9; }
-  .activity::before { content: '▸ '; opacity: .6; }
+  .activity::before { content: '\25B8 '; opacity: .6; }
 
   /* ---------- HUD corner brackets ---------- */
-  .hud { position: absolute; width: 140px; height: 96px; border: 1px solid var(--line); pointer-events: none; }
+  .hud { position: absolute; width: 150px; height: 96px; border: 1px solid var(--line); pointer-events: none; }
   .hud.tl { top: 10px; left: 12px; border-right: none; border-bottom: none; }
   .hud.tr { top: 10px; right: 12px; border-left: none; border-bottom: none; }
-  .hud .readout { position: absolute; top: 8px; left: 10px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.5px; color: rgba(0,212,255,.6); line-height: 1.9; }
+  .hud .readout { position: absolute; top: 8px; left: 10px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.5px; color: rgba(0,212,255,.6); line-height: 1.9; white-space: nowrap; }
   .hud.tr .readout { left: auto; right: 10px; text-align: right; }
+  .hud .readout b { font-weight: 500; color: rgba(207,239,255,.85); }
+  .hud .readout b.local { color: var(--green); }
+  .hud .readout b.auto { color: var(--violet); }
 
   /* ---------- transcript + input ---------- */
   .transcript-wrap {
@@ -307,18 +422,19 @@
     font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
     letter-spacing: 4px; color: rgba(0,212,255,.55);
   }
+  .transcript-title kbd { font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 400; letter-spacing: 1px; color: rgba(207,239,255,.3); margin-left: 12px; }
   .stop-btn {
     font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 3px;
     padding: 6px 15px; border: 1px solid rgba(255,107,107,.28); border-radius: 2px;
     color: rgba(255,150,150,.45); background: rgba(255,107,107,.05);
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-    transition: all .25s; cursor: default; white-space: nowrap;
+    transition: all var(--fast); cursor: default; white-space: nowrap;
   }
   .stop-btn.armed { color: #ff8a8a; border-color: rgba(255,107,107,.6); background: rgba(255,107,107,.14); box-shadow: 0 0 16px rgba(255,80,80,.22); cursor: pointer; }
   .stop-btn.armed:hover { color: #1a0505; background: #ff6b6b; box-shadow: 0 0 24px rgba(255,80,80,.5); }
   #transcript { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; min-height: 0; }
-  .line { display: flex; gap: 12px; align-items: baseline; animation: rise .35s ease both; }
-  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .line { display: flex; gap: 12px; align-items: baseline; animation: rise .2s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   .who { font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700; letter-spacing: 2px; min-width: 64px; text-align: right; flex-shrink: 0; }
   .ts { display: block; font-family: 'JetBrains Mono', monospace; font-size: 8px; font-weight: 400; letter-spacing: 1px; color: rgba(207,239,255,.35); margin-top: 3px; }
   .line.user .who { color: var(--amber); }
@@ -337,27 +453,28 @@
   #send {
     font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px;
     padding: 0 20px; border: 1px solid var(--line); border-radius: 2px; cursor: pointer;
-    color: var(--cyan); background: rgba(0, 212, 255, .07); transition: all .25s;
+    color: var(--cyan); background: rgba(0, 212, 255, .07); transition: all var(--fast);
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
   }
   #send:hover { color: #031018; background: var(--cyan); box-shadow: 0 0 18px var(--cyan-dim); }
   #mic {
     font-family: 'Orbitron', sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 3px;
     padding: 0 16px; border: 1px solid var(--line); border-radius: 2px; cursor: pointer;
-    color: var(--cyan); background: rgba(0, 212, 255, .07); transition: all .25s;
+    color: var(--cyan); background: rgba(0, 212, 255, .07); transition: all var(--fast);
     clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); white-space: nowrap;
   }
   #mic.rec { color: #1a0505; background: #ff6b6b; border-color: rgba(255,107,107,.6); animation: recpulse 1.2s ease-in-out infinite; }
   @keyframes recpulse { 0%,100% { box-shadow: 0 0 10px rgba(255,80,80,.35); } 50% { box-shadow: 0 0 26px rgba(255,80,80,.7); } }
 
-  /* ---------- boot ---------- */
+  /* ---------- boot (≤600 ms cold; skipped entirely on warm start) ---------- */
   #boot {
     position: fixed; inset: 0; z-index: 100; background: var(--bg);
     display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 18px;
-    transition: opacity .8s;
+    transition: opacity .2s;
   }
   #boot.done { opacity: 0; pointer-events: none; }
-  #boot .logo { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: clamp(26px, 6vw, 42px); letter-spacing: clamp(8px, 2.5vw, 18px); color: #eafcff; text-shadow: 0 0 30px var(--cyan-dim); animation: bootglow 2s ease-in-out infinite; }
+  #boot.gone, html.warm #boot { display: none; }
+  #boot .logo { font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: clamp(26px, 6vw, 42px); letter-spacing: clamp(8px, 2.5vw, 18px); color: #eafcff; text-shadow: 0 0 30px var(--cyan-dim); animation: bootglow .6s ease-in-out infinite; }
   @keyframes bootglow { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
   #bootlog { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--cyan); letter-spacing: 2px; height: 16px; }
 
@@ -371,19 +488,29 @@
     #btnSys { display: block; }
     .asides { display: none; }
     body.sys-open .asides {
-      display: block; position: fixed; inset: 0; z-index: 70;
+      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 70;
       background: rgba(2, 7, 15, .97); overflow-y: auto;
-      padding: 78px 16px 24px;
+      padding: 96px 16px 24px;
     }
     body.sys-open aside { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; overflow: visible; }
+    body.sys-open aside.right { order: -1; }   /* TASKS first in the drawer */
+    body.sys-open .panel.tasks-panel { max-height: 40vh; }
+    body.sys-open .panel.evo-panel { max-height: 30vh; }
+    body.sys-open .panel.grow { min-height: 140px; max-height: 40vh; }
   }
   @media (max-width: 760px) {
     .hud { display: none; }
     header { padding: 8px 14px; }
     .wordmark small { display: none; }
     .clock { display: none; }
+    .pin-label { display: none; }
+    .active-badge small { display: none; }
+    .top-right { gap: 8px; }
+    .model-btn { padding: 7px 10px; }
+    .status-pill { min-width: 0; padding: 7px 12px; }
     .transcript-wrap { padding: 10px 14px 12px; }
     .who { min-width: 48px; }
+    #toasts { top: 8px; }
   }
   @media (max-height: 560px) {
     .stage { grid-template-rows: auto 1fr minmax(110px, 34vh); }
@@ -399,13 +526,20 @@
     <div class="wordmark">ALFRED<small>PERSONAL&nbsp;ASSISTANT</small></div>
     <div class="top-right">
       <div class="clock" id="clock">--:--:--</div>
-      <div class="model-switch" id="modelSwitch">
-        <button class="model-btn auto active" id="btnAuto" data-target="auto">AUTO</button>
-        <button class="model-btn" id="btnCloud" data-target="cloud">CLOUD&nbsp;·&nbsp;CLAUDE</button>
-        <button class="model-btn local" id="btnLocal" data-target="local">LOCAL&nbsp;·&nbsp;QWEN</button>
+      <div class="pin-group" title="Brain pin — set only from the HUD. Voice and text can't switch brains.">
+        <div class="pin-label">BRAIN&nbsp;PIN<kbd>CTRL+1/2/3</kbd></div>
+        <div class="model-switch" id="modelSwitch">
+          <button class="model-btn auto active" id="btnAuto" data-target="auto" title="AUTO — router picks a brain per turn (Ctrl+1)">AUTO</button>
+          <button class="model-btn cloud" id="btnCloud" data-target="cloud" title="Pin CLOUD · CLAUDE (Ctrl+2)">CLAUDE</button>
+          <button class="model-btn local" id="btnLocal" data-target="local" title="Pin LOCAL · QWEN (Ctrl+3)">QWEN</button>
+        </div>
+        <div class="pin-hint">HUD-ONLY&nbsp;&middot;&nbsp;VOICE&nbsp;CAN'T&nbsp;SWITCH</div>
       </div>
       <button id="btnSys" type="button">SYS</button>
-      <div class="status-pill" id="status">BOOT</div>
+      <div class="status-group">
+        <div class="active-badge floating" id="activeBadge" title="ACTIVE BRAIN — who took the current/last turn"><small>ACTIVE</small><span id="activeName">CLAUDE</span></div>
+        <div class="status-pill" id="status">BOOT</div>
+      </div>
     </div>
   </header>
 
@@ -440,12 +574,15 @@
         </svg>
       </section>
       <section class="panel">
-        <div class="panel-title">SUBSYSTEMS</div>
+        <div class="panel-title">SUBSYSTEMS <span class="count" id="healthAge"></span></div>
         <div class="subsys">
-          <div><i></i>STT · WHISPER GPU</div>
-          <div><i></i>TTS · EDGE RYAN</div>
-          <div><i></i>BRAIN · <b id="brainLabel">CLAUDE</b></div>
-          <div><i></i><span id="connState">LINK · OFFLINE</span></div>
+          <div><i id="dStt" class="unk"></i>STT · WHISPER<b id="vStt" class="dim">?</b></div>
+          <div><i id="dTts" class="unk"></i>TTS · EDGE<b id="vTts" class="dim">—</b></div>
+          <div><i id="dCloud" class="unk"></i>CLOUD · CLAUDE<b id="vCloud" class="dim">?</b></div>
+          <div><i id="dLocal" class="unk"></i>LOCAL · OLLAMA<b id="vLocal" class="dim">?</b></div>
+          <div><i id="dTunnel" class="unk"></i>TUNNEL<b id="vTunnel" class="dim">?</b></div>
+          <div><i id="dLink" class="unk"></i>LINK<b id="vLink" class="dim">OFFLINE</b></div>
+          <div><i id="dSess" class="unk"></i>SESSION<b id="vSess" class="dim">—</b></div>
         </div>
       </section>
       <section class="panel grow">
@@ -455,16 +592,28 @@
     </aside>
 
     <aside class="right">
+      <section class="panel grow tasks-panel">
+        <div class="panel-title">TASKS <span class="count" id="tasksCount"></span></div>
+        <div class="task-list" id="taskList"><div class="tasks-empty">NO TASKS YET</div></div>
+      </section>
       <section class="panel">
-        <div class="panel-title">TELEMETRY</div>
+        <div class="panel-title">TELEMETRY <span class="count" id="telePin"></span></div>
         <div class="tele">
           <div class="t"><span>UPTIME</span><b id="uptime">—</b></div>
-          <div class="t"><span>LAST REPLY</span><b id="lat">—</b></div>
           <div class="t"><span>TURNS</span><b id="turns">0</b></div>
-          <div class="t"><span>VAULT</span><b>D:\ALFRED</b></div>
+          <div class="t"><span>LAST E2E</span><b id="e2e">—</b></div>
+        </div>
+        <div class="lat">
+          <div class="lat-bar" id="latBar"><i class="stt" id="bStt"></i><i class="route" id="bRoute"></i><i class="ttfw" id="bTtfw"></i><i class="rest" id="bRest"></i><em id="bBudget"></em></div>
+          <div class="lat-legend">
+            <span class="stt">STT<b id="mStt">—</b></span>
+            <span class="route">ROUTE<b id="mRoute">—</b></span>
+            <span class="ttfw">FIRST&nbsp;WORD<b id="mTtfw">—</b></span>
+          </div>
+          <div class="lat-foot"><span>UTTERANCE END → FIRST WORD</span><span>BUDGET 800 MS</span></div>
         </div>
       </section>
-      <section class="panel grow">
+      <section class="panel evo-panel">
         <div class="panel-title">EVOLUTION LOG <span class="count" id="evoCount"></span></div>
         <div class="evo-list" id="evoList"><div class="evo-empty">AWAITING LINK…</div></div>
       </section>
@@ -472,8 +621,8 @@
   </div>
 
   <div class="core-wrap">
-    <div class="hud tl"><div class="readout">CORE&nbsp;v4.0<br>MODE&nbsp;·&nbsp;DUPLEX<br>SEC&nbsp;·&nbsp;KEYGATE</div></div>
-    <div class="hud tr"><div class="readout">GRID&nbsp;·&nbsp;ONLINE<br>NET&nbsp;·&nbsp;CF&nbsp;TUNNEL<br>PWR&nbsp;·&nbsp;NOMINAL</div></div>
+    <div class="hud tl"><div class="readout">CORE&nbsp;v5.0<br>PIN&nbsp;·&nbsp;<b id="roPin" class="auto">AUTO</b><br>ACTIVE&nbsp;·&nbsp;<b id="roActive">CLAUDE</b></div></div>
+    <div class="hud tr"><div class="readout">SESSION&nbsp;·&nbsp;<b id="roSession">—</b><br>NET&nbsp;·&nbsp;<b id="roNet">—</b><br>STT&nbsp;·&nbsp;<b id="roStt">—</b></div></div>
 
     <div class="reactor" id="reactor">
       <div class="sweep"></div>
@@ -504,17 +653,19 @@
 
   <div class="transcript-wrap">
     <div class="transcript-head">
-      <div class="transcript-title">SESSION LOG</div>
+      <div class="transcript-title">SESSION LOG<kbd>/ TYPE &nbsp; ESC STOP</kbd></div>
       <button class="stop-btn" id="stop" type="button" title="Stop Alfred (Esc)">&#9632;&nbsp;STOP</button>
     </div>
     <div id="transcript"></div>
     <form id="cmdform" autocomplete="off">
       <button id="mic" type="button" style="display:none">&#9679;&nbsp;MIC</button>
-      <input id="cmd" placeholder="Type to Alfred — commands work silently too…" />
+      <input id="cmd" placeholder="Type to Alfred — commands work silently too…  ( / to focus )" />
       <button id="send" type="submit">SEND</button>
     </form>
   </div>
 </div>
+
+<div id="toasts"></div>
 
 <div id="codestream">
   <div class="cs-bar"><span class="cs-file" id="csFile"></span><span class="cs-mode" id="csMode"></span></div>
@@ -539,32 +690,59 @@
 
 <script>
 (() => {
-  const reactor = document.getElementById('reactor');
-  const statusEl = document.getElementById('status');
-  const transcript = document.getElementById('transcript');
-  const connState = document.getElementById('connState');
-  const latEl = document.getElementById('lat');
-  const hintEl = document.getElementById('hint');
-  const activityEl = document.getElementById('activity');
-  const brainLabel = document.getElementById('brainLabel');
-  const btnAuto = document.getElementById('btnAuto');
-  const btnCloud = document.getElementById('btnCloud');
-  const btnLocal = document.getElementById('btnLocal');
-  const stopBtn = document.getElementById('stop');
-  const uptimeEl = document.getElementById('uptime');
-  const turnsEl = document.getElementById('turns');
-  const evoList = document.getElementById('evoList');
-  const evoCount = document.getElementById('evoCount');
   const N = id => document.getElementById(id);
+  const reactor = N('reactor');
+  const statusEl = N('status');
+  const transcript = N('transcript');
+  const hintEl = N('hint');
+  const activityEl = N('activity');
+  const activeBadge = N('activeBadge'), activeName = N('activeName');
+  const btnAuto = N('btnAuto'), btnCloud = N('btnCloud'), btnLocal = N('btnLocal');
+  const PIN_BTNS = { auto: btnAuto, cloud: btnCloud, local: btnLocal };
+  const stopBtn = N('stop');
+  const uptimeEl = N('uptime'), turnsEl = N('turns');
+  const evoList = N('evoList'), evoCount = N('evoCount');
+  const roPin = N('roPin'), roActive = N('roActive'), roSession = N('roSession'), roNet = N('roNet'), roStt = N('roStt');
+  const BRAIN_NAME = { cloud: 'CLAUDE', local: 'QWEN' };
+  const PIN_NAME = { auto: 'AUTO', cloud: 'CLAUDE', local: 'QWEN' };
+
+  // Backend address. The desk HUD (file:// or localhost) talks straight to ws://localhost:8765.
+  // The same page served from GitHub Pages reaches the backend through the Cloudflare
+  // tunnel (?ws=wss://...&key=...) and must authenticate before Alfred will listen.
+  const params = new URLSearchParams(location.search);
+  const isLocalWs = u => /^wss?:\/\/(localhost|127\.0\.0\.1)/i.test(u);
+  // only tunnel (non-localhost) endpoints are remembered — a localhost ?ws= (hud_mock.py
+  // on 8766) applies to this load only, so the desk HUD always comes back to the real core
+  const pws = params.get('ws');
+  if (pws) { if (isLocalWs(pws)) localStorage.removeItem('alfred_ws'); else localStorage.setItem('alfred_ws', pws); }
+  if (params.get('key')) localStorage.setItem('alfred_key', params.get('key'));
+  const WS_URL = pws || localStorage.getItem('alfred_ws') || 'ws://localhost:8765';
+  const REMOTE = !isLocalWs(WS_URL);
 
   /* ---------- clock ---------- */
-  const clock = document.getElementById('clock');
-  setInterval(() => { clock.textContent = new Date().toLocaleTimeString('en-GB'); }, 500);
+  const clock = N('clock');
+  const tickClock = () => { clock.textContent = new Date().toLocaleTimeString('en-GB'); };
+  tickClock(); setInterval(tickClock, 500);
+
+  /* ---------- notice toasts ---------- */
+  const toasts = N('toasts');
+  function toast(text, level, ms) {
+    if (!text) return;
+    const d = document.createElement('div');
+    d.className = 'toast ' + (level === 'warn' ? 'warn' : 'info');
+    d.textContent = text;
+    const kill = () => { d.classList.add('out'); setTimeout(() => d.remove(), 200); };
+    d.addEventListener('click', kill);
+    toasts.appendChild(d);
+    while (toasts.children.length > 4) toasts.firstChild.remove();
+    setTimeout(kill, ms || (level === 'warn' ? 6500 : 5000));
+  }
 
   /* ---------- state ---------- */
   let state = 'idle';
-  let model = 'cloud';
-  let serverState = null;  // last state pushed by the backend — survives the boot animation
+  let model = 'cloud';     // ACTIVE brain (from `model`)
+  let mode = 'auto';       // PIN (from `mode`) — HUD buttons are the only writer
+  let pendingMode = null, pendingTimer = null;
   let micLevel = 0, micLevelSmooth = 0;
   let thinkingSince = null;
   function applyReactorClass() {
@@ -583,30 +761,51 @@
                        : 'JUST SPEAK — F9 PUSH-TO-TALK';
     updateDiagram();
   }
-  setInterval(() => {
-    if (state === 'thinking' && thinkingSince) {
-      hintEl.textContent = `WORKING · ${Math.floor((Date.now() - thinkingSince) / 1000)}s — KEEP TALKING TO STEER`;
-    }
-  }, 1000);
   function setActivity(text) {
     activityEl.textContent = text || '';
     activityEl.classList.toggle('on', !!text);
     if (text) flashTool(text);
   }
-  let mode = 'auto';
-  function setMode(m) {
+  function paintPin(m) {
+    for (const k in PIN_BTNS) PIN_BTNS[k].classList.toggle('active', k === m);
+    roPin.textContent = PIN_NAME[m] || String(m).toUpperCase();
+    roPin.className = m;
+    N('telePin').textContent = 'PIN ' + (PIN_NAME[m] || m);
+    activeBadge.classList.toggle('floating', m === 'auto');
+  }
+  function setMode(m) {              // authoritative pin from the backend
+    if (!(m in PIN_BTNS)) return;
     mode = m;
-    btnAuto.classList.toggle('active', m === 'auto');
-    btnCloud.classList.toggle('active', m === 'cloud');
-    btnLocal.classList.toggle('active', m === 'local');
+    pendingMode = null; clearTimeout(pendingTimer);
+    for (const k in PIN_BTNS) PIN_BTNS[k].classList.remove('pending');
+    paintPin(m);
+  }
+  function pin(target) {             // click / hotkey → optimistic paint, backend confirms via `mode`
+    if (!(target in PIN_BTNS)) return;
+    if (target === mode && !pendingMode) return;
+    if (!wsOpen()) { toast('LINK OFFLINE — PIN NOT SENT', 'warn'); return; }
+    pendingMode = target;
+    paintPin(target);
+    for (const k in PIN_BTNS) PIN_BTNS[k].classList.toggle('pending', k === target);
+    send({ type: 'switch', target });
+    clearTimeout(pendingTimer);
+    pendingTimer = setTimeout(() => {          // no confirmation → fall back to the last known pin
+      if (!pendingMode) return;
+      pendingMode = null;
+      for (const k in PIN_BTNS) PIN_BTNS[k].classList.remove('pending');
+      paintPin(mode);
+      toast('PIN NOT CONFIRMED BY CORE', 'warn');
+    }, 2500);
   }
   function setModel(m) {
-    model = m;
-    brainLabel.textContent = m === 'cloud' ? 'CLAUDE' : 'QWEN LOCAL';
-    latEl.textContent = '—';
+    model = m === 'local' ? 'local' : 'cloud';
+    activeName.textContent = BRAIN_NAME[model];
+    activeBadge.classList.toggle('local', model === 'local');
+    roActive.textContent = BRAIN_NAME[model];
+    roActive.className = model === 'local' ? 'local' : '';
     applyReactorClass();
-    N('n-cloud').classList.toggle('brain', m === 'cloud');
-    N('n-local').classList.toggle('brain', m === 'local');
+    N('n-cloud').classList.toggle('brain', model === 'cloud');
+    N('n-local').classList.toggle('brain', model === 'local');
     updateDiagram();
   }
 
@@ -619,13 +818,13 @@
     const brainL = model === 'local' ? 'l-local' : 'l-cloud';
     if (state === 'listening') {
       N('n-you').classList.add('on'); N('l-you').classList.add('flow');
-      if (typeof REMOTE !== 'undefined' && REMOTE) { N('n-phone').classList.add('on'); N('l-phone').classList.add('flow'); }
+      if (REMOTE) { N('n-phone').classList.add('on'); N('l-phone').classList.add('flow'); }
     } else if (state === 'thinking') {
       N(brainN).classList.add('on'); N(brainL).classList.add('flow');
     } else if (state === 'speaking') {
       N('n-you').classList.add('on'); N('l-you').classList.add('flow');
       N(brainN).classList.add('on');
-      if (typeof REMOTE !== 'undefined' && REMOTE) { N('n-phone').classList.add('on'); N('l-phone').classList.add('flow'); }
+      if (REMOTE) { N('n-phone').classList.add('on'); N('l-phone').classList.add('flow'); }
     }
   }
   const TOOL_PAT = [
@@ -649,47 +848,184 @@
     }
   }
 
-  /* ---------- telemetry: uptime + evolution log ---------- */
+  /* ---------- sysinfo: uptime + evolution log ---------- */
   let startedEpoch = null;
-  setInterval(() => {
-    if (!startedEpoch) return;
-    let s = Math.max(0, Math.floor((Date.now() - startedEpoch) / 1000));
-    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-    uptimeEl.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-  }, 1000);
   function applySysinfo(info) {
     if (info.started) startedEpoch = info.started * 1000;
     const evos = info.evolutions || [];
     evoCount.textContent = evos.length ? 'x' + evos.length : '';
-    evoList.innerHTML = '';
-    if (!evos.length) { evoList.innerHTML = '<div class="evo-empty">NO EVOLUTIONS LOGGED</div>'; return; }
-    for (const e of evos) {
+    const frag = document.createDocumentFragment();
+    if (!evos.length) {
+      const e = document.createElement('div'); e.className = 'evo-empty'; e.textContent = 'NO EVOLUTIONS LOGGED'; frag.appendChild(e);
+    }
+    for (const e of evos.slice(-40)) {
       const div = document.createElement('div');
       div.className = 'evo';
-      div.innerHTML = '<div class="d"></div><div class="m"></div>';
-      div.querySelector('.d').textContent = e.date;
-      div.querySelector('.m').textContent = e.msg;
-      evoList.appendChild(div);
+      const d = document.createElement('div'); d.className = 'd'; d.textContent = e.date || '';
+      const m = document.createElement('div'); m.className = 'm'; m.textContent = e.msg || '';
+      div.append(d, m);
+      frag.appendChild(div);
+    }
+    evoList.replaceChildren(frag);
+  }
+
+  /* ---------- health (SUBSYSTEMS panel + corner readouts) ---------- */
+  let healthAt = 0;
+  function dot(id, cls) { N(id).className = cls; }
+  function val(id, text, cls) { const el = N(id); el.textContent = text; el.className = cls || ''; }
+  function applyHealth(h) {
+    healthAt = Date.now();
+    const stt = String(h.stt || '?').toLowerCase();
+    dot('dStt', stt === 'gpu' ? 'ok' : stt === 'cpu' ? 'warn' : 'unk');
+    val('vStt', stt.toUpperCase(), stt === 'gpu' ? '' : stt === 'cpu' ? '' : 'dim');
+    roStt.textContent = stt.toUpperCase();
+    dot('dTts', 'ok');
+    val('vTts', 'RYAN · ' + (h.phrases != null ? h.phrases : 0) + ' CACHED');
+    dot('dCloud', h.cloud ? 'ok' : 'bad');   val('vCloud', h.cloud ? 'UP' : 'DOWN', h.cloud ? '' : 'bad');
+    dot('dLocal', h.local ? 'ok' : 'bad');   val('vLocal', h.local ? 'UP' : 'DOWN', h.local ? '' : 'bad');
+    dot('dTunnel', h.tunnel ? 'ok' : 'unk'); val('vTunnel', h.tunnel ? 'UP' : 'OFF', h.tunnel ? '' : 'dim');
+    roNet.textContent = h.tunnel ? 'CF TUNNEL' : 'LOCAL';
+    const sess = h.session || '';
+    dot('dSess', sess ? 'ok' : 'unk'); val('vSess', sess || '—', sess ? '' : 'dim');
+    roSession.textContent = sess || '—';
+    N('n-cloud').classList.toggle('down', !h.cloud);
+    N('n-local').classList.toggle('down', !h.local);
+    N('healthAge').textContent = 'LIVE';
+    // health carries the pin too — self-heal if a `mode` frame was ever missed
+    if (h.mode && !pendingMode && h.mode !== mode && h.mode in PIN_BTNS) setMode(h.mode);
+  }
+  function healthUnknown() {
+    ['dStt', 'dTts', 'dCloud', 'dLocal', 'dTunnel', 'dSess'].forEach(id => dot(id, 'unk'));
+    N('n-cloud').classList.remove('down'); N('n-local').classList.remove('down');
+    N('healthAge').textContent = '';
+  }
+  function setLink(text, cls) {   // ONLINE / REMOTE / OFFLINE / KEY REJECTED
+    dot('dLink', cls); val('vLink', text, cls === 'ok' ? '' : cls === 'bad' ? 'bad' : 'dim');
+  }
+
+  /* ---------- metrics (TELEMETRY latency bar) ---------- */
+  let metricsSeen = false;
+  const e2eEl = N('e2e'), bStt = N('bStt'), bRoute = N('bRoute'), bTtfw = N('bTtfw'), bRest = N('bRest'), bBudget = N('bBudget');
+  const mStt = N('mStt'), mRoute = N('mRoute'), mTtfw = N('mTtfw');
+  const msTxt = v => (v == null || isNaN(v)) ? '—' : Math.round(v) + ' ms';
+  const budgetCls = ms => ms <= 800 ? 'ok' : ms <= 1500 ? 'warn' : 'bad';
+  function applyMetrics(m) {
+    metricsSeen = true;
+    const stt = Math.max(0, +m.stt || 0), route = Math.max(0, +m.route || 0), ttfw = Math.max(0, +m.ttfw || 0);
+    const sum = stt + route + ttfw;
+    const e2e = m.e2e != null && !isNaN(+m.e2e) ? Math.max(0, +m.e2e) : sum;
+    const total = Math.max(e2e, sum, 1);
+    const pct = v => (v / total * 100).toFixed(2) + '%';
+    bStt.style.width = pct(stt); bRoute.style.width = pct(route); bTtfw.style.width = pct(ttfw);
+    bRest.style.width = pct(Math.max(0, e2e - sum));
+    if (total > 800) { bBudget.style.left = pct(800); bBudget.classList.add('on'); } else bBudget.classList.remove('on');
+    mStt.textContent = m.stt != null ? msTxt(stt) : '—';
+    mRoute.textContent = m.route != null ? msTxt(route) : '—';
+    mTtfw.textContent = m.ttfw != null ? msTxt(ttfw) : '—';
+    const shown = m.e2e != null ? e2e : (sum || null);
+    e2eEl.className = shown == null ? '' : budgetCls(shown);
+    e2eEl.textContent = '';
+    e2eEl.append(document.createTextNode(msTxt(shown)));
+    if (m.brain) {
+      const t = document.createElement('span');
+      t.className = 'tag ' + (m.brain === 'local' ? 'local' : 'cloud');
+      t.textContent = BRAIN_NAME[m.brain === 'local' ? 'local' : 'cloud'];
+      e2eEl.appendChild(t);
     }
   }
+
+  /* ---------- tasks (the ledger) ---------- */
+  const taskList = N('taskList'), tasksCount = N('tasksCount');
+  const runningTimers = new Map();   // task id → elapsed <span>, ticked once a second
+  const ST_LABEL = { running: 'RUNNING', done: 'DONE', failed: 'FAILED', stopped: 'STOPPED', interrupted: 'RESUMING', abandoned: 'ABANDONED' };
+  function fmtDur(ms) {
+    if (ms == null || isNaN(ms) || ms < 0) return '—';
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60), r = s % 60;
+    if (m < 60) return m + 'm ' + String(r).padStart(2, '0') + 's';
+    return Math.floor(m / 60) + 'h ' + String(m % 60).padStart(2, '0') + 'm';
+  }
+  const hhmm = epochS => epochS ? new Date(epochS * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '';
+  function applyTasks(items) {
+    const list = Array.isArray(items) ? items.slice() : [];
+    list.sort((a, b) => (b.id || 0) - (a.id || 0) || (b.started || 0) - (a.started || 0));   // newest first
+    runningTimers.clear();
+    const frag = document.createDocumentFragment();
+    let running = 0;
+    const now = Date.now();
+    for (const t of list.slice(0, 14)) {
+      const st = ST_LABEL[t.status] ? t.status : 'done';
+      if (st === 'running') running++;
+      const row = document.createElement('div');
+      row.className = 'task ' + st;
+      row.title = t.text || '';
+      const mark = document.createElement('span'); mark.className = 'mark';
+      const mid = document.createElement('div');
+      const txt = document.createElement('div'); txt.className = 'txt'; txt.textContent = t.text || '(untitled)';
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const tag = document.createElement('span'); tag.className = 'tag ' + (t.brain === 'local' ? 'local' : 'cloud');
+      tag.textContent = BRAIN_NAME[t.brain === 'local' ? 'local' : 'cloud'];
+      meta.appendChild(tag);
+      const idn = document.createElement('span'); idn.textContent = '#' + (t.id != null ? t.id : '?') + (t.started ? ' · ' + hhmm(t.started) : '');
+      meta.appendChild(idn);
+      if (t.retries) { const r = document.createElement('span'); r.className = 'retry'; r.textContent = 'RETRY ' + t.retries; meta.appendChild(r); }
+      mid.append(txt, meta);
+      const right = document.createElement('div'); right.className = 'right';
+      const time = document.createElement('span');
+      const startMs = t.started ? t.started * 1000 : null;
+      if (st === 'running') {
+        time.textContent = startMs ? fmtDur(now - startMs) : '—';
+        if (startMs) runningTimers.set(t.id, [time, startMs]);
+      } else {
+        const endMs = t.ended ? t.ended * 1000 : null;
+        time.textContent = (startMs && endMs) ? fmtDur(endMs - startMs) : '';
+      }
+      const stl = document.createElement('span'); stl.className = 'st'; stl.textContent = ST_LABEL[st];
+      right.append(time, stl);
+      row.append(mark, mid, right);
+      frag.appendChild(row);
+    }
+    if (!list.length) { const e = document.createElement('div'); e.className = 'tasks-empty'; e.textContent = 'NO TASKS YET'; frag.appendChild(e); }
+    taskList.replaceChildren(frag);
+    tasksCount.textContent = running ? running + ' RUNNING' : (list.length ? 'x' + list.length : '');
+    tasksCount.classList.toggle('hot', running > 0);
+  }
+
+  /* ---------- one 1 s ticker for everything slow ---------- */
+  setInterval(() => {
+    const now = Date.now();
+    if (startedEpoch) {
+      let s = Math.max(0, Math.floor((now - startedEpoch) / 1000));
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+      uptimeEl.textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+    }
+    if (state === 'thinking' && thinkingSince) {
+      hintEl.textContent = `WORKING · ${Math.floor((now - thinkingSince) / 1000)}s — KEEP TALKING TO STEER`;
+    }
+    for (const [el, startMs] of runningTimers.values()) el.textContent = fmtDur(now - startMs);
+    if (healthAt && now - healthAt > 65000) { healthUnknown(); N('healthAge').textContent = 'STALE'; healthAt = 0; }
+  }, 1000);
 
   /* ---------- ops feed ---------- */
   const opsList = N('opsList'), opsCount = N('opsCount');
   let opsN = 0;
   function addOp(text) {
     if (!text) return;
-    if (!opsN) opsList.innerHTML = '';
+    if (!opsN) opsList.replaceChildren();
     opsN++;
     opsCount.textContent = 'x' + opsN;
     const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const sep = text.indexOf(' · ');
-    const tool = sep < 0 ? text : text.slice(0, sep);
-    const detail = sep < 0 ? '' : text.slice(sep + 3);
+    const sub = text.startsWith('↳');
+    const body = sub ? text.replace(/^↳\s*/, '') : text;
+    const sep = body.indexOf(' · ');
+    const tool = sep < 0 ? body : body.slice(0, sep);
+    const detail = sep < 0 ? '' : body.slice(sep + 3);
     const div = document.createElement('div');
-    div.className = 'op';
+    div.className = 'op' + (sub ? ' sub' : '');
     div.innerHTML = '<span class="t"></span><span class="w"><b></b> <span></span></span>';
     div.querySelector('.t').textContent = ts;
-    div.querySelector('b').textContent = tool;
+    div.querySelector('b').textContent = (sub ? '↳ ' : '') + tool;
     div.querySelector('.w span').textContent = detail;
     opsList.appendChild(div);
     while (opsList.children.length > 80) opsList.removeChild(opsList.firstChild);
@@ -716,23 +1052,25 @@
   function showEdit(msg) {
     csFile.textContent = msg.file || '';
     csMode.textContent = msg.mode || 'EDIT';
-    csBody.innerHTML = '';
     const rows = [...(msg.removed || []).map(l => ['del', '- ' + l]),
                   ...(msg.added || []).map(l => ['add', '+ ' + l]),
-                  ...(msg.info || []).map(l => ['out', l])];
+                  ...(msg.info || []).map(l => ['out', l])].slice(0, 400);
+    const frag = document.createDocumentFragment();
     rows.forEach(([cls, text], i) => {
       const d = document.createElement('div');
       d.className = cls;
       d.textContent = text;
-      d.style.animationDelay = (i * 45) + 'ms';
-      csBody.appendChild(d);
+      d.style.animationDelay = Math.min(i * 30, 1500) + 'ms';
+      frag.appendChild(d);
     });
+    csBody.replaceChildren(frag);
     document.body.classList.add('cs-open');
     csBody.scrollTop = 0;
     clearTimeout(csTimer);
-    csTimer = setTimeout(() => document.body.classList.remove('cs-open'), 9000 + rows.length * 45);
+    csTimer = setTimeout(() => document.body.classList.remove('cs-open'), 9000 + Math.min(rows.length * 30, 1500));
   }
 
+  /* ---------- transcript ---------- */
   let turns = 0;
   let stick = true;  // auto-scroll only while the user is at the bottom
   transcript.addEventListener('scroll', () => {
@@ -742,7 +1080,7 @@
     if (role === 'user') turnsEl.textContent = ++turns;
     const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const div = document.createElement('div');
-    div.className = 'line ' + role;
+    div.className = 'line ' + (role === 'user' ? 'user' : 'alfred');
     div.innerHTML = `<div class="who">${role === 'user' ? 'YOU' : 'ALFRED'}<span class="ts">${ts}</span></div><div class="what"></div>`;
     div.querySelector('.what').textContent = text;
     transcript.appendChild(div);
@@ -751,10 +1089,14 @@
   }
 
   /* ---------- sys drawer (mobile) ---------- */
-  document.getElementById('btnSys').addEventListener('click', () => document.body.classList.toggle('sys-open'));
+  const asidesEl = N('asides'), headerEl = document.querySelector('header');
+  function fitDrawer() {   // the header wraps on narrow screens — keep the drawer below it
+    if (document.body.classList.contains('sys-open')) asidesEl.style.paddingTop = (headerEl.offsetHeight + 12) + 'px';
+  }
+  N('btnSys').addEventListener('click', () => { document.body.classList.toggle('sys-open'); fitDrawer(); });
 
   /* ---------- waveform ring ---------- */
-  const cv = document.getElementById('wave');
+  const cv = N('wave');
   const ctx = cv.getContext('2d');
   let phase = 0;
   function sizeCanvas() {
@@ -762,7 +1104,7 @@
     cv.width = r.width * devicePixelRatio;
     cv.height = r.height * devicePixelRatio;
   }
-  addEventListener('resize', sizeCanvas);
+  addEventListener('resize', () => { sizeCanvas(); fitDrawer(); });
   sizeCanvas();
 
   const BARS = 96;
@@ -777,6 +1119,9 @@
     const color = state === 'speaking' ? '157,123,255'
                 : state === 'thinking' ? '255,180,84'
                 : model === 'local' ? '125,255,176' : '0,212,255';
+    ctx.strokeStyle = `rgba(${color},${active ? 0.85 : 0.3})`;
+    ctx.lineWidth = 2 * devicePixelRatio;
+    ctx.beginPath();
     for (let i = 0; i < BARS; i++) {
       const a = (i / BARS) * Math.PI * 2;
       let w;
@@ -789,30 +1134,22 @@
         w = 2.5 + Math.sin(i * 0.5 + phase) * 1.5;
       }
       const r1 = base, r2 = base + w * devicePixelRatio;
-      ctx.strokeStyle = `rgba(${color},${active ? 0.85 : 0.3})`;
-      ctx.lineWidth = 2 * devicePixelRatio;
-      ctx.beginPath();
       ctx.moveTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1);
       ctx.lineTo(cx + Math.cos(a) * r2, cy + Math.sin(a) * r2);
-      ctx.stroke();
     }
+    ctx.stroke();
     requestAnimationFrame(draw);
   }
   draw();
 
-  /* ---------- backend link (two-way) ---------- */
-  // The desk HUD (file:// or localhost) talks straight to ws://localhost:8765.
-  // The same page served from GitHub Pages reaches the backend through the Cloudflare
-  // tunnel (?ws=wss://...&key=...) and must authenticate before Alfred will listen.
-  const params = new URLSearchParams(location.search);
-  ['ws', 'key'].forEach(k => { if (params.get(k)) localStorage.setItem('alfred_' + k, params.get(k)); });
-  const WS_URL = params.get('ws') || localStorage.getItem('alfred_ws') || 'ws://localhost:8765';
-  const REMOTE = !/^wss?:\/\/(localhost|127\.0\.0\.1)/i.test(WS_URL);
+  /* ---------- backend link (two-way; WS_URL / REMOTE resolved at the top) ---------- */
   let badKey = false;
+  let wasOpen = false, lostToasted = false;
 
   let ws = null;
+  const wsOpen = () => !!(ws && ws.readyState === WebSocket.OPEN);
   function send(obj) {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+    if (wsOpen()) ws.send(JSON.stringify(obj));
   }
   function accessKey() {
     let k = localStorage.getItem('alfred_key');
@@ -822,47 +1159,60 @@
     }
     return localStorage.getItem('alfred_key') || '';
   }
+  const HANDLERS = {
+    state:      m => setState(m.value),
+    model:      m => setModel(m.value),
+    mode:       m => setMode(m.value),
+    transcript: m => addLine(m.role, m.text),
+    level:      m => { micLevel = +m.value || 0; },
+    latency:    m => { if (!metricsSeen && m.value != null) mTtfw.textContent = Math.round(m.value * 1000) + ' ms'; },
+    metrics:    m => applyMetrics(m),
+    activity:   m => setActivity(m.text),
+    work:       m => addOp(m.text),
+    editstream: m => showEdit(m),
+    show:       m => { if (!(REMOTE && /^file:/i.test(m.url || ''))) showPage(m.url, m.title); },   // the remote HUD can't reach files on the PC
+    sysinfo:    m => applySysinfo(m),
+    tasks:      m => applyTasks(m.items),
+    health:     m => applyHealth(m),
+    notice:     m => toast(m.text, m.level),
+    authfail:   () => { badKey = true; },
+    tts:        m => playTts(m.data),
+    reload:     () => location.reload(),
+  };
   function connect() {
     try { ws = new WebSocket(WS_URL); } catch { return setTimeout(connect, 3000); }
     ws.onopen = () => {
       if (REMOTE) {
         badKey = false;
         send({ type: 'auth', key: accessKey() });
-        connState.innerHTML = 'LINK&nbsp;·&nbsp;<b style="color:#7dffb0">REMOTE</b>';
+        setLink('REMOTE', 'ok');
       } else {
-        connState.innerHTML = 'LINK&nbsp;·&nbsp;<b style="color:#7dffb0">ONLINE</b>';
+        setLink('ONLINE', 'ok');
       }
+      if (wasOpen && lostToasted) toast('LINK RESTORED', 'info', 2500);
+      wasOpen = true; lostToasted = false;
+      if (statusEl.classList.contains('offline')) { statusEl.className = 'status-pill'; statusEl.textContent = 'LINKED'; }
     };
     ws.onclose = () => {
-      connState.textContent = badKey ? 'LINK · KEY REJECTED' : 'LINK · OFFLINE';
+      setLink(badKey ? 'KEY REJECTED' : 'OFFLINE', 'bad');
+      healthUnknown();
+      statusEl.className = 'status-pill offline'; statusEl.textContent = 'OFFLINE';
+      stopBtn.classList.remove('armed');
+      if (wasOpen && !lostToasted) { toast(badKey ? 'ACCESS KEY REJECTED' : 'LINK LOST — RECONNECTING', 'warn'); lostToasted = true; }
       if (badKey) localStorage.removeItem('alfred_key');  // reprompt on the next attempt
-      setTimeout(connect, 3000);
+      setTimeout(connect, badKey ? 3000 : 1500);
     };
     ws.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data);
-      if (msg.type === 'state') { serverState = msg.value; setState(msg.value); }
-      if (msg.type === 'model') setModel(msg.value);
-      if (msg.type === 'mode') setMode(msg.value);
-      if (msg.type === 'transcript') addLine(msg.role, msg.text);
-      if (msg.type === 'level') micLevel = msg.value;
-      if (msg.type === 'latency') latEl.textContent = msg.value + 's';
-      if (msg.type === 'activity') setActivity(msg.text);
-      if (msg.type === 'work') addOp(msg.text);
-      if (msg.type === 'editstream') showEdit(msg);
-      if (msg.type === 'show') {
-        // the remote HUD can't reach files on the PC — skip file:// there
-        if (!(REMOTE && /^file:/i.test(msg.url || ''))) showPage(msg.url, msg.title);
-      }
-      if (msg.type === 'sysinfo') applySysinfo(msg);
-      if (msg.type === 'authfail') badKey = true;
-      if (msg.type === 'tts') playTts(msg.data);
-      if (msg.type === 'reload') location.reload();
+      let msg;
+      try { msg = JSON.parse(ev.data); } catch { return; }
+      const h = HANDLERS[msg && msg.type];
+      if (h) { try { h(msg); } catch (e) { console.warn('hud', msg.type, e); } }
     };
   }
   connect();
 
   /* ---------- phone audio: hands-free mic + spoken replies (remote only) ---------- */
-  const micBtn = document.getElementById('mic');
+  const micBtn = N('mic');
   let audioCtx = null, micStream = null, micSrc = null, micNode = null, micMute = null;
   let handsFree = false, capturing = false;
   let vadChunks = [], preRoll = [], voicedBufs = 0, silentBufs = 0, ttsTailUntil = 0;
@@ -967,10 +1317,8 @@
     ttsTailUntil = performance.now() + 500;  // let the speaker's echo die before VAD resumes
   }
 
-  /* ---------- model buttons ---------- */
-  btnAuto.addEventListener('click', () => send({ type: 'switch', target: 'auto' }));
-  btnCloud.addEventListener('click', () => send({ type: 'switch', target: 'cloud' }));
-  btnLocal.addEventListener('click', () => send({ type: 'switch', target: 'local' }));
+  /* ---------- pin buttons (the ONLY way to switch brains) ---------- */
+  for (const k in PIN_BTNS) PIN_BTNS[k].addEventListener('click', () => pin(k));
 
   /* ---------- stop / interrupt ---------- */
   function requestStop() {
@@ -979,35 +1327,54 @@
     stopBtn.classList.remove('armed');
   }
   stopBtn.addEventListener('click', requestStop);
-  addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape') return;
-    if (document.body.classList.contains('viewer-open')) showPage('');
-    else requestStop();
-  });
 
   /* ---------- typed commands ---------- */
-  const form = document.getElementById('cmdform');
-  const cmd = document.getElementById('cmd');
+  const form = N('cmdform');
+  const cmd = N('cmd');
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const text = cmd.value.trim();
     if (!text) return;
+    if (!wsOpen()) { toast('LINK OFFLINE — NOT SENT', 'warn'); return; }
     send({ type: 'text', text });
     cmd.value = '';
   });
 
-  /* ---------- boot sequence ---------- */
-  const bootEl = document.getElementById('boot');
-  const bootlog = document.getElementById('bootlog');
-  const steps = ['INITIALIZING ARC CORE', 'LINKING NEURAL BRIDGE', 'LOADING VAULT MEMORY', 'CALIBRATING AUDIO ARRAY', 'SYSTEMS NOMINAL — ALFRED ONLINE'];
-  let i = 0;
-  const bootTimer = setInterval(() => {
-    bootlog.textContent = steps[i++] + '…';
-    if (i === steps.length) {
-      clearInterval(bootTimer);
-      setTimeout(() => { bootEl.classList.add('done'); setState(serverState || 'idle'); }, 600);
+  /* ---------- keyboard: Esc stop/close · "/" focus input · Ctrl+1/2/3 pin ---------- */
+  addEventListener('keydown', (e) => {
+    const inField = /^(INPUT|TEXTAREA)$/.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
+    if (e.key === 'Escape') {
+      if (document.body.classList.contains('viewer-open')) showPage('');
+      else if (document.body.classList.contains('sys-open')) document.body.classList.remove('sys-open');
+      else if (document.body.classList.contains('cs-open')) document.body.classList.remove('cs-open');
+      else requestStop();
+      if (inField) e.target.blur();
+      return;
     }
-  }, 500);
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === '1' || e.key === '2' || e.key === '3')) {
+      e.preventDefault();
+      pin(e.key === '1' ? 'auto' : e.key === '2' ? 'cloud' : 'local');
+      return;
+    }
+    if (e.key === '/' && !inField && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault();
+      cmd.focus();
+    }
+  });
+
+  /* ---------- boot: ≤600 ms cold, skipped when this tab has booted before ---------- */
+  const bootEl = N('boot');
+  const warm = document.documentElement.classList.contains('warm');
+  try { sessionStorage.setItem('alfred_booted', '1'); } catch {}
+  if (warm) {
+    bootEl.classList.add('gone');
+  } else {
+    const bootlog = N('bootlog');
+    const steps = ['ARC CORE', 'NEURAL BRIDGE', 'ALFRED ONLINE'];
+    steps.forEach((s, i) => setTimeout(() => { bootlog.textContent = s + '…'; }, i * 140));
+    setTimeout(() => bootEl.classList.add('done'), 420);
+    setTimeout(() => bootEl.classList.add('gone'), 640);
+  }
 })();
 </script>
 </body>
