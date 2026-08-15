@@ -233,6 +233,7 @@
   #csBody div { white-space: pre-wrap; word-break: break-all; opacity: 0; animation: cs-line .18s ease forwards; }
   #csBody .del { color: #ff5470; }
   #csBody .add { color: var(--green); }
+  #csBody .out { color: var(--cyan); opacity: .92; }
   @keyframes cs-line { to { opacity: 1; } }
 
   /* ---------- reactor ---------- */
@@ -710,7 +711,8 @@
     csMode.textContent = msg.mode || 'EDIT';
     csBody.innerHTML = '';
     const rows = [...(msg.removed || []).map(l => ['del', '- ' + l]),
-                  ...(msg.added || []).map(l => ['add', '+ ' + l])];
+                  ...(msg.added || []).map(l => ['add', '+ ' + l]),
+                  ...(msg.info || []).map(l => ['out', l])];
     rows.forEach(([cls, text], i) => {
       const d = document.createElement('div');
       d.className = cls;
