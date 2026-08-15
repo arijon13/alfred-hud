@@ -286,6 +286,82 @@
   .op.sub .w { color: rgba(207,239,255,.6); }
   .ops-empty { font-size: 10px; color: rgba(207,239,255,.35); letter-spacing: 2px; padding: 8px 0; }
 
+  /* OPS | LOG tabs — the ops feed plus a persistent, expandable worklog of everything
+     Alfred read / searched / ran / edited (the overlay fades; this doesn't) */
+  .tabs { display: flex; gap: 10px; }
+  .tab { cursor: pointer; color: rgba(0,212,255,.45); transition: color var(--fast); }
+  .tab.on { color: var(--cyan); text-shadow: 0 0 8px var(--cyan-dim); }
+  .tab:hover { color: var(--cyan); }
+  .log-list { flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; padding-right: 4px; font-family: 'JetBrains Mono', monospace; display: none; }
+  .log-list.on { display: block; }
+  .ops-list.off { display: none; }
+  body.log-on #diag { max-height: 15vh; }   /* reading the worklog: give it the room, shrink the diagram */
+  .lg { padding: 4px 0; border-bottom: 1px dashed rgba(0,212,255,.1); animation: rise .2s ease both; cursor: pointer; }
+  .lg .h { display: flex; gap: 8px; font-size: 10px; letter-spacing: .5px; align-items: baseline; }
+  .lg .h .t { color: rgba(0,212,255,.45); flex-shrink: 0; }
+  .lg .h .m { font-family: 'Orbitron', sans-serif; font-size: 7.5px; font-weight: 700; letter-spacing: 1.5px; color: var(--green); flex-shrink: 0; }
+  .lg .h .m.edit { color: var(--amber); }
+  .lg .h .f { color: rgba(207,239,255,.85); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lg .b { display: none; margin: 4px 0 2px 0; padding: 6px 8px; background: rgba(0,212,255,.04); border-left: 2px solid rgba(0,212,255,.25); font-size: 10px; line-height: 1.45; max-height: 32vh; overflow-y: auto; scrollbar-width: thin; }
+  .lg.open .b { display: block; }
+  .lg .b div { white-space: pre-wrap; word-break: break-all; }
+  .lg .b .del { color: var(--red); } .lg .b .add { color: var(--green); } .lg .b .out { color: rgba(207,239,255,.85); }
+  .lg .h .n { color: rgba(207,239,255,.35); flex-shrink: 0; }
+
+  /* NOW strip — what Alfred is on right now (task, kind, elapsed, current step) */
+  .now {
+    position: absolute; bottom: calc(3% + 24px); left: 50%; transform: translateX(-50%);
+    width: min(600px, 80%); pointer-events: none; opacity: 0; transition: opacity .2s;
+    border: 1px solid rgba(255,180,84,.35); background: rgba(6, 14, 24, .78); backdrop-filter: blur(6px);
+    padding: 8px 14px 9px; clip-path: polygon(10px 0, 100% 0, calc(100% - 10px) 100%, 0 100%);
+    box-shadow: 0 0 26px rgba(255,180,84,.12);
+  }
+  .now.on { opacity: 1; }
+  .now.local { border-color: rgba(125,255,176,.35); box-shadow: 0 0 26px rgba(125,255,176,.1); }
+  .now .nh { display: flex; align-items: baseline; gap: 10px; font-family: 'Orbitron', sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: 3px; color: rgba(255,180,84,.85); }
+  .now.local .nh { color: rgba(125,255,176,.85); }
+  .now .nh .kind { padding: 1px 6px; border: 1px solid currentColor; border-radius: 2px; font-size: 7.5px; }
+  .now .nh .el { margin-left: auto; font-family: 'JetBrains Mono', monospace; font-weight: 400; letter-spacing: 1px; color: rgba(207,239,255,.6); }
+  .now .nt { margin-top: 4px; font-size: 14.5px; font-weight: 600; color: #eafcff; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .now .nd { margin-top: 4px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px; color: var(--amber); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now.local .nd { color: var(--green); }
+  .now .nd::before { content: '\25B8 '; opacity: .6; }
+  .now .ns { margin-top: 3px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1px; color: rgba(207,239,255,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .now .ns::before { content: 'STEER \203A '; color: rgba(0,212,255,.6); }
+  .now .ns:empty { display: none; }
+
+  /* MISSION panel — the business owner loop + long tasks */
+  .mission-panel { flex: 0 0 auto; }
+  .mis-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .mis-status { font-family: 'Orbitron', sans-serif; font-size: 8.5px; font-weight: 700; letter-spacing: 2px; padding: 3px 8px; border: 1px solid; border-radius: 2px; }
+  .mis-status.active { color: var(--green); border-color: rgba(125,255,176,.5); box-shadow: 0 0 10px rgba(125,255,176,.25); animation: tpulse 2.4s ease-in-out infinite; }
+  .mis-status.paused { color: var(--amber); border-color: rgba(255,180,84,.5); }
+  .mis-status.first-money { color: #031018; background: var(--green); border-color: var(--green); }
+  .mis-btns { margin-left: auto; display: flex; gap: 4px; }
+  .mis-btn { font-family: 'Orbitron', sans-serif; font-size: 7.5px; font-weight: 700; letter-spacing: 1.5px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 2px; cursor: pointer; color: var(--cyan); background: rgba(0,212,255,.05); transition: all var(--fast); white-space: nowrap; }
+  .mis-btn:hover { color: #031018; background: var(--cyan); }
+  .mis-btn.warn { color: var(--amber); border-color: rgba(255,180,84,.4); } .mis-btn.warn:hover { color: #170b02; background: var(--amber); }
+  .mis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px; }
+  .mis-grid div { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(0,212,255,.12); padding: 3px 0; }
+  .mis-grid span { color: rgba(207,239,255,.5); } .mis-grid b { color: #eafcff; font-weight: 500; }
+  .mis-sum { margin-top: 7px; font-size: 12px; line-height: 1.35; color: rgba(207,239,255,.85); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+  .mis-sum:empty { display: none; }
+  .mis-sum::before { content: 'LAST SHIFT · '; font-family: 'Orbitron', sans-serif; font-size: 7.5px; letter-spacing: 1.5px; color: rgba(0,212,255,.55); }
+  .lt-list { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+  .lt { font-size: 11.5px; }
+  .lt .r { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .lt .r span { color: rgba(207,239,255,.9); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lt .r b { font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1px; color: rgba(207,239,255,.5); font-weight: 400; flex-shrink: 0; }
+  .lt .bar { height: 4px; background: rgba(0,212,255,.08); border: 1px solid rgba(0,212,255,.15); margin-top: 3px; }
+  .lt .bar i { display: block; height: 100%; background: var(--cyan); transition: width .3s; }
+  .lt.done .bar i { background: var(--green); } .lt.stalled .bar i, .lt.waiting .bar i { background: var(--amber); }
+  .lt.stalled .r b, .lt.waiting .r b { color: var(--amber); }
+  .lt-empty { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.5px; color: rgba(207,239,255,.35); }
+
+  /* ASK card — a question Alfred asked mid-work; his default runs unless answered */
+  .toast.ask { border-color: rgba(157,123,255,.7); box-shadow: 0 0 26px rgba(157,123,255,.28); color: #f2ecff; font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 600; letter-spacing: .3px; padding: 10px 20px; }
+  .toast.ask::before { content: 'ALFRED ASKS  '; font-family: 'Orbitron', sans-serif; font-size: 8px; letter-spacing: 2px; color: var(--violet); }
+
   /* notice toasts — top-centre, transient, stack */
   #toasts {
     position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 95;
@@ -400,6 +476,8 @@
   }
   .activity.on { opacity: .9; }
   .activity::before { content: '\25B8 '; opacity: .6; }
+  body.now-on .activity { opacity: 0; }   /* the NOW strip carries the same line while a task runs */
+  @media (max-height: 640px) { .now .nt { -webkit-line-clamp: 1; } .now .ns { display: none; } }
 
   /* ---------- HUD corner brackets ---------- */
   .hud { position: absolute; width: 150px; height: 96px; border: 1px solid var(--line); pointer-events: none; }
@@ -492,7 +570,7 @@
       background: rgba(2, 7, 15, .97); overflow-y: auto;
       padding: 96px 16px 24px;
     }
-    body.sys-open aside { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; overflow: visible; }
+    body.sys-open aside { display: flex; flex-direction: column; gap: 12px; padding: 0 0 14px; overflow: visible; flex-shrink: 0; }   /* the drawer scrolls; asides must not shrink into each other */
     body.sys-open aside.right { order: -1; }   /* TASKS first in the drawer */
     body.sys-open .panel.tasks-panel { max-height: 40vh; }
     body.sys-open .panel.evo-panel { max-height: 30vh; }
@@ -586,12 +664,31 @@
         </div>
       </section>
       <section class="panel grow">
-        <div class="panel-title">OPS FEED <span class="count" id="opsCount"></span></div>
+        <div class="panel-title"><span class="tabs"><span class="tab on" id="tabOps">OPS FEED</span><span class="tab" id="tabLog">WORKLOG</span></span><span class="count" id="opsCount"></span></div>
         <div class="ops-list" id="opsList"><div class="ops-empty">IDLE — NO OPERATIONS YET</div></div>
+        <div class="log-list" id="logList"><div class="ops-empty">NOTHING READ, SEARCHED OR EDITED YET</div></div>
       </section>
     </aside>
 
     <aside class="right">
+      <section class="panel mission-panel">
+        <div class="panel-title">MISSION · ALFRED LABS <span class="count" id="misNext"></span></div>
+        <div class="mis-head">
+          <span class="mis-status" id="misStatus">—</span>
+          <span class="mis-btns">
+            <button class="mis-btn" id="misShift" type="button" title="Run a business shift now">SHIFT NOW</button>
+            <button class="mis-btn warn" id="misToggle" type="button" title="Pause / resume the hourly shifts">PAUSE</button>
+          </span>
+        </div>
+        <div class="mis-grid">
+          <div><span>TODAY</span><b id="misToday">0</b></div>
+          <div><span>TOTAL</span><b id="misTotal">0</b></div>
+          <div><span>LAST</span><b id="misLast">—</b></div>
+          <div><span>VOICE</span><b id="misVoice">—</b></div>
+        </div>
+        <div class="mis-sum" id="misSum"></div>
+        <div class="lt-list" id="ltList"><div class="lt-empty">NO LONG TASKS — SAY "LONG TASK: …"</div></div>
+      </section>
       <section class="panel grow tasks-panel">
         <div class="panel-title">TASKS <span class="count" id="tasksCount"></span></div>
         <div class="task-list" id="taskList"><div class="tasks-empty">NO TASKS YET</div></div>
@@ -621,7 +718,13 @@
   </div>
 
   <div class="core-wrap">
-    <div class="hud tl"><div class="readout">CORE&nbsp;v5.0<br>PIN&nbsp;·&nbsp;<b id="roPin" class="auto">AUTO</b><br>ACTIVE&nbsp;·&nbsp;<b id="roActive">CLAUDE</b></div></div>
+    <div class="now" id="now">
+      <div class="nh"><span>NOW</span><span class="kind" id="nowKind">YOU</span><span class="el" id="nowEl">0s</span></div>
+      <div class="nt" id="nowTask"></div>
+      <div class="nd" id="nowDetail"></div>
+      <div class="ns" id="nowSteer"></div>
+    </div>
+    <div class="hud tl"><div class="readout">CORE&nbsp;v6.0<br>PIN&nbsp;·&nbsp;<b id="roPin" class="auto">AUTO</b><br>ACTIVE&nbsp;·&nbsp;<b id="roActive">CLAUDE</b></div></div>
     <div class="hud tr"><div class="readout">SESSION&nbsp;·&nbsp;<b id="roSession">—</b><br>NET&nbsp;·&nbsp;<b id="roNet">—</b><br>STT&nbsp;·&nbsp;<b id="roStt">—</b></div></div>
 
     <div class="reactor" id="reactor">
@@ -729,7 +832,7 @@
   function toast(text, level, ms) {
     if (!text) return;
     const d = document.createElement('div');
-    d.className = 'toast ' + (level === 'warn' ? 'warn' : 'info');
+    d.className = 'toast ' + (level === 'warn' ? 'warn' : level === 'ask' ? 'ask' : 'info');
     d.textContent = text;
     const kill = () => { d.classList.add('out'); setTimeout(() => d.remove(), 200); };
     d.addEventListener('click', kill);
@@ -1009,6 +1112,8 @@
     }
     for (const [el, startMs] of runningTimers.values()) el.textContent = fmtDur(now - startMs);
     if (healthAt && now - healthAt > 65000) { healthUnknown(); N('healthAge').textContent = 'STALE'; healthAt = 0; }
+    if (nowSince) nowElapsed.textContent = fmtDur(now - nowSince);
+    tickMission();
   }, 1000);
 
   /* ---------- ops feed ---------- */
@@ -1072,7 +1177,105 @@
     csBody.scrollTop = 0;
     clearTimeout(csTimer);
     csTimer = setTimeout(() => document.body.classList.remove('cs-open'), 9000 + Math.min(rows.length * 30, 1500));
+    addLog(msg, rows);
   }
+
+  /* ---------- worklog (persistent, expandable — the overlay fades, this stays) ---------- */
+  const logList = N('logList'), tabOps = N('tabOps'), tabLog = N('tabLog');
+  let logN = 0, logTab = false;
+  function addLog(msg, rows) {
+    if (!logN) logList.replaceChildren();
+    logN++;
+    const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const isEdit = msg.mode === 'EDIT' || msg.mode === 'WRITE';
+    const d = document.createElement('div');
+    d.className = 'lg';
+    d.innerHTML = '<div class="h"><span class="t"></span><span class="m"></span><span class="f"></span><span class="n"></span></div><div class="b"></div>';
+    d.querySelector('.t').textContent = ts;
+    const m = d.querySelector('.m'); m.textContent = msg.mode || 'READ'; if (isEdit) m.classList.add('edit');
+    d.querySelector('.f').textContent = msg.file || '';
+    d.querySelector('.n').textContent = rows.length + ' ln';
+    const b = d.querySelector('.b');
+    rows.forEach(([cls, text]) => { const r = document.createElement('div'); r.className = cls; r.textContent = text; b.appendChild(r); });
+    d.addEventListener('click', () => d.classList.toggle('open'));
+    logList.appendChild(d);
+    while (logList.children.length > 200) logList.removeChild(logList.firstChild);
+    if (logTab) logList.scrollTop = logList.scrollHeight;
+    if (!logTab) tabLog.textContent = 'WORKLOG ' + logN;
+  }
+  function showTab(log) {
+    logTab = log;
+    document.body.classList.toggle('log-on', log);
+    tabOps.classList.toggle('on', !log); tabLog.classList.toggle('on', log);
+    opsList.classList.toggle('off', log); logList.classList.toggle('on', log);
+    if (log) { tabLog.textContent = 'WORKLOG'; logList.scrollTop = logList.scrollHeight; }
+  }
+  tabOps.addEventListener('click', () => showTab(false));
+  tabLog.addEventListener('click', () => showTab(true));
+
+  /* ---------- NOW strip — what Alfred is on right now ---------- */
+  const nowEl = N('now'), nowKind = N('nowKind'), nowTask = N('nowTask'), nowDetail = N('nowDetail'), nowSteer = N('nowSteer'), nowElapsed = N('nowEl');
+  let nowSince = null;
+  function applyFocus(f) {
+    document.body.classList.toggle('now-on', !!(f && f.task));
+    if (!f || !f.task) { nowEl.classList.remove('on'); nowSince = null; return; }
+    nowKind.textContent = String(f.kind || 'you').toUpperCase();
+    nowTask.textContent = f.task;
+    nowDetail.textContent = f.detail || '';
+    nowSteer.textContent = f.steer || '';
+    nowSince = f.since ? f.since * 1000 : Date.now();
+    nowEl.classList.toggle('local', f.brain === 'local');
+    nowEl.classList.add('on');
+  }
+
+  /* ---------- MISSION panel — the business owner loop + long tasks ---------- */
+  const misStatus = N('misStatus'), misToggle = N('misToggle'), misNext = N('misNext'), misSum = N('misSum'), ltList = N('ltList');
+  let misNextAt = null, misState = null;
+  function applyMission(m) {
+    misState = m.status || 'active';
+    misStatus.textContent = misState.toUpperCase().replace('-', ' ');
+    misStatus.className = 'mis-status ' + misState;
+    misToggle.textContent = misState === 'active' ? 'PAUSE' : 'RESUME';
+    N('misToday').textContent = m.shifts_today != null ? m.shifts_today : 0;
+    N('misTotal').textContent = m.shifts_total != null ? m.shifts_total : 0;
+    N('misLast').textContent = m.last_shift ? hhmm(m.last_shift) : '—';
+    N('misVoice').textContent = m.speaking ? 'ALOUD' : 'PHONE';
+    misSum.textContent = m.last_summary || '';
+    misNextAt = (m.next_in != null && misState === 'active') ? Date.now() + m.next_in * 1000 : null;
+    tickMission();
+    const lts = Array.isArray(m.long_tasks) ? m.long_tasks : [];
+    const frag = document.createDocumentFragment();
+    if (!lts.length) { const e = document.createElement('div'); e.className = 'lt-empty'; e.textContent = 'NO LONG TASKS — SAY "LONG TASK: …"'; frag.appendChild(e); }
+    for (const t of lts.slice(-5)) {
+      const d = document.createElement('div');
+      d.className = 'lt ' + (t.status || 'active');
+      d.title = t.title || t.slug;
+      const r = document.createElement('div'); r.className = 'r';
+      const s = document.createElement('span'); s.textContent = t.title || t.slug;
+      const b = document.createElement('b'); b.textContent = (t.done || 0) + '/' + (t.total || 0) + ' · ' + String(t.status || 'active').toUpperCase();
+      r.append(s, b);
+      const bar = document.createElement('div'); bar.className = 'bar';
+      const fill = document.createElement('i'); fill.style.width = (t.total ? Math.round(100 * (t.done || 0) / t.total) : 0) + '%';
+      bar.appendChild(fill);
+      d.append(r, bar);
+      frag.appendChild(d);
+    }
+    ltList.replaceChildren(frag);
+  }
+  function tickMission() {
+    if (misState !== 'active') { misNext.textContent = misState === 'paused' ? 'PAUSED' : ''; return; }
+    if (misNextAt == null) { misNext.textContent = ''; return; }
+    const s = Math.max(0, Math.floor((misNextAt - Date.now()) / 1000));
+    misNext.textContent = s <= 0 ? 'SHIFT DUE' : 'NEXT ' + (s >= 60 ? Math.ceil(s / 60) + 'M' : s + 'S');
+  }
+  misToggle.addEventListener('click', () => {
+    if (!wsOpen()) { toast('LINK OFFLINE', 'warn'); return; }
+    send({ type: 'mission', action: misState === 'active' ? 'pause' : 'resume' });
+  });
+  N('misShift').addEventListener('click', () => {
+    if (!wsOpen()) { toast('LINK OFFLINE', 'warn'); return; }
+    send({ type: 'mission', action: 'shift' });
+  });
 
   /* ---------- transcript ---------- */
   let turns = 0;
@@ -1179,6 +1382,9 @@
     tasks:      m => applyTasks(m.items),
     health:     m => applyHealth(m),
     notice:     m => toast(m.text, m.level),
+    focus:      m => applyFocus(m),
+    mission:    m => applyMission(m),
+    ask:        m => toast(m.text, 'ask', 25000),
     authfail:   () => { badKey = true; },
     tts:        m => playTts(m.data),
     reload:     () => location.reload(),
