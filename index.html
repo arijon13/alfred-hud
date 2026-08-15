@@ -886,7 +886,7 @@
     dot('dTts', h.tts_fallback ? 'warn' : 'ok');
     val('vTts', voice + ' · ' + (h.phrases != null ? h.phrases : 0) + ' CACHED' + (h.tts_fallback ? ' · FALLBACK' : ''), h.tts_fallback ? 'bad' : '');
     dot('dCloud', h.cloud ? 'ok' : 'bad');   val('vCloud', h.cloud ? 'UP' : 'DOWN', h.cloud ? '' : 'bad');
-    dot('dLocal', h.local ? 'ok' : 'bad');   val('vLocal', h.local ? (h.runner ? 'UP · DIRECT' : 'UP') : 'DOWN', h.local ? '' : 'bad');
+    dot('dLocal', h.local ? (h.deliberate ? 'warn' : 'ok') : 'bad');   val('vLocal', h.local ? ((h.runner ? 'UP · DIRECT' : 'UP') + (h.deliberate ? ' · DELIBERATE' : '')) : 'DOWN', h.local ? '' : 'bad');
     dot('dTunnel', h.tunnel ? 'ok' : 'unk'); val('vTunnel', h.tunnel ? 'UP' : 'OFF', h.tunnel ? '' : 'dim');
     roNet.textContent = h.tunnel ? 'CF TUNNEL' : 'LOCAL';
     const sess = h.session || '';
