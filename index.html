@@ -577,7 +577,7 @@
         <div class="panel-title">SUBSYSTEMS <span class="count" id="healthAge"></span></div>
         <div class="subsys">
           <div><i id="dStt" class="unk"></i>STT · WHISPER<b id="vStt" class="dim">?</b></div>
-          <div><i id="dTts" class="unk"></i>TTS · EDGE<b id="vTts" class="dim">—</b></div>
+          <div><i id="dTts" class="unk"></i>TTS · <span id="lTts">EDGE</span><b id="vTts" class="dim">—</b></div>
           <div><i id="dCloud" class="unk"></i>CLOUD · CLAUDE<b id="vCloud" class="dim">?</b></div>
           <div><i id="dLocal" class="unk"></i>LOCAL · OLLAMA<b id="vLocal" class="dim">?</b></div>
           <div><i id="dTunnel" class="unk"></i>TUNNEL<b id="vTunnel" class="dim">?</b></div>
@@ -879,8 +879,12 @@
     dot('dStt', stt === 'gpu' ? 'ok' : stt === 'cpu' ? 'warn' : 'unk');
     val('vStt', stt.toUpperCase(), stt === 'gpu' ? '' : stt === 'cpu' ? '' : 'dim');
     roStt.textContent = stt.toUpperCase();
-    dot('dTts', 'ok');
-    val('vTts', 'RYAN · ' + (h.phrases != null ? h.phrases : 0) + ' CACHED');
+    // engine/voice come from the backend (kokoro = local GPU, edge = Microsoft cloud);
+    // 'edge' while the engine is set to kokoro means the local engine fell back
+    const eng = String(h.tts || 'edge').toLowerCase(), voice = String(h.voice || 'RYAN').toUpperCase();
+    N('lTts').textContent = eng.toUpperCase() + (eng === 'kokoro' ? ' · GPU' : '');
+    dot('dTts', h.tts_fallback ? 'warn' : 'ok');
+    val('vTts', voice + ' · ' + (h.phrases != null ? h.phrases : 0) + ' CACHED' + (h.tts_fallback ? ' · FALLBACK' : ''), h.tts_fallback ? 'bad' : '');
     dot('dCloud', h.cloud ? 'ok' : 'bad');   val('vCloud', h.cloud ? 'UP' : 'DOWN', h.cloud ? '' : 'bad');
     dot('dLocal', h.local ? 'ok' : 'bad');   val('vLocal', h.local ? 'UP' : 'DOWN', h.local ? '' : 'bad');
     dot('dTunnel', h.tunnel ? 'ok' : 'unk'); val('vTunnel', h.tunnel ? 'UP' : 'OFF', h.tunnel ? '' : 'dim');
