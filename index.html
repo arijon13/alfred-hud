@@ -267,6 +267,8 @@
   .task.abandoned { opacity: .38; border-left-color: rgba(207,239,255,.2); }
   .task.abandoned .mark { background: transparent; color: rgba(207,239,255,.5); }
   .task.abandoned .mark::before { content: '\2014'; }
+  .task.other .mark { background: transparent; color: rgba(207,239,255,.5); }   /* status the HUD doesn't know: neutral, labelled as-is */
+  .task.other .mark::before { content: '\00B7'; }
   .task .retry { color: var(--amber); }
   .tasks-empty { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: rgba(207,239,255,.35); letter-spacing: 2px; padding: 8px 0; }
 
@@ -289,9 +291,14 @@
   /* OPS | LOG tabs — the ops feed plus a persistent, expandable worklog of everything
      Alfred read / searched / ran / edited (the overlay fades; this doesn't) */
   .tabs { display: flex; gap: 10px; }
-  .tab { cursor: pointer; color: rgba(0,212,255,.45); transition: color var(--fast); }
+  .tab { cursor: pointer; color: rgba(0,212,255,.45); transition: color var(--fast); font: inherit; letter-spacing: inherit; background: none; border: none; padding: 0; }
   .tab.on { color: var(--cyan); text-shadow: 0 0 8px var(--cyan-dim); }
   .tab:hover { color: var(--cyan); }
+  .tab:focus-visible, .mis-btn:focus-visible, .log-clear:focus-visible { outline: 1px solid var(--cyan); outline-offset: 2px; }
+  .log-tools { display: flex; align-items: baseline; gap: 8px; }
+  .log-clear { display: none; font: inherit; letter-spacing: inherit; background: none; border: none; padding: 0; cursor: pointer; color: rgba(255,180,84,.6); transition: color var(--fast); }
+  .log-clear:hover { color: var(--amber); }
+  body.log-on .log-clear { display: inline; }
   .log-list { flex: 1; overflow-y: auto; min-height: 0; scrollbar-width: thin; scrollbar-color: var(--cyan-dim) transparent; padding-right: 4px; font-family: 'JetBrains Mono', monospace; display: none; }
   .log-list.on { display: block; }
   .ops-list.off { display: none; }
@@ -343,6 +350,8 @@
   .mis-btn.warn { color: var(--amber); border-color: rgba(255,180,84,.4); } .mis-btn.warn:hover { color: #170b02; background: var(--amber); }
   .mis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; font-family: 'JetBrains Mono', monospace; font-size: 10px; letter-spacing: 1px; }
   .mis-grid div { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(0,212,255,.12); padding: 3px 0; }
+  .mis-grid div[hidden] { display: none; }
+  .mis-grid #misCostRow b { color: var(--amber); }
   .mis-grid span { color: rgba(207,239,255,.5); } .mis-grid b { color: #eafcff; font-weight: 500; }
   .mis-sum { margin-top: 7px; font-size: 12px; line-height: 1.35; color: rgba(207,239,255,.85); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
   .mis-sum:empty { display: none; }
@@ -358,16 +367,20 @@
   .lt.stalled .r b, .lt.waiting .r b { color: var(--amber); }
   .lt-empty { margin-top: 8px; font-family: 'JetBrains Mono', monospace; font-size: 9px; letter-spacing: 1.5px; color: rgba(207,239,255,.35); }
 
-  /* ASK card — a question Alfred asked mid-work; his default runs unless answered */
-  .toast.ask { border-color: rgba(157,123,255,.7); box-shadow: 0 0 26px rgba(157,123,255,.28); color: #f2ecff; font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 600; letter-spacing: .3px; padding: 10px 20px; }
-  .toast.ask::before { content: 'ALFRED ASKS  '; font-family: 'Orbitron', sans-serif; font-size: 8px; letter-spacing: 2px; color: var(--violet); }
-
-  /* notice toasts — top-centre, transient, stack */
-  #toasts {
+  /* ASK card — a question Alfred asked mid-work; his default runs unless answered.
+     Own slot (#asks), separate from the transient toast stack: ordinary notices can't
+     evict it. Dismissed on click or when the next user transcript line arrives. */
+  #notices {
     position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 95;
     display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none;
     width: min(620px, 92vw);
   }
+  #asks, #toasts { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 100%; pointer-events: none; }
+  #asks:empty, #toasts:empty { display: none; }
+  .toast.ask { border-color: rgba(157,123,255,.7); box-shadow: 0 0 26px rgba(157,123,255,.28); color: #f2ecff; font-family: 'Rajdhani', sans-serif; font-size: 15px; font-weight: 600; letter-spacing: .3px; padding: 10px 20px; }
+  .toast.ask::before { content: 'ALFRED ASKS  '; font-family: 'Orbitron', sans-serif; font-size: 8px; letter-spacing: 2px; color: var(--violet); }
+
+  /* notice toasts — top-centre under any ASK card, transient, stack */
   .toast {
     pointer-events: auto; cursor: pointer; max-width: 100%;
     font-family: 'JetBrains Mono', monospace; font-size: 11px; letter-spacing: 1.5px; line-height: 1.4;
@@ -588,11 +601,30 @@
     .status-pill { min-width: 0; padding: 7px 12px; }
     .transcript-wrap { padding: 10px 14px 12px; }
     .who { min-width: 48px; }
-    #toasts { top: 8px; }
+    #notices { top: 8px; }
+  }
+  /* touch: >=40 px targets for the small controls (desktop keeps them compact) */
+  @media (pointer: coarse), (max-width: 760px) {
+    .mis-btn { min-height: 40px; min-width: 44px; padding: 8px 12px; font-size: 8.5px; }
+    .mis-btns { gap: 8px; }
+    .tabs { gap: 14px; }
+    .tab, .log-clear { min-height: 40px; min-width: 44px; align-items: center; justify-content: center; padding: 0 6px; }
+    .tab { display: inline-flex; }
+    body.log-on .log-clear { display: inline-flex; }   /* CLEAR only on the WORKLOG tab — the OPS FEED keeps the base display:none */
+    .log-tools { align-items: center; }
+    .panel-title:has(.tabs) { align-items: center; padding-bottom: 2px; }
   }
   @media (max-height: 560px) {
     .stage { grid-template-rows: auto 1fr minmax(110px, 34vh); }
     .hint { display: none; }
+  }
+  /* reduced motion: no spinning rings / sweep / pulses; state colours still change */
+  @media (prefers-reduced-motion: reduce) {
+    .spin-slow, .spin-rev, .spin-fast, .sweep, .core-glow, .model-btn.pending,
+    .task.running .mark, .task.interrupted .mark, .mis-status.active, #mic.rec,
+    #diag .link.flow, #boot .logo { animation: none !important; }
+    .panel, .toast, .op, .lg, .line, #csBody div, body.viewer-open #viewer, body.cs-open #codestream { animation: none !important; opacity: 1; }
+    .lat-bar i, .lt .bar i, .status-pill, .active-badge, .model-btn, .mis-btn, .task, .now { transition: none !important; }
   }
 </style>
 </head>
@@ -664,7 +696,7 @@
         </div>
       </section>
       <section class="panel grow">
-        <div class="panel-title"><span class="tabs"><span class="tab on" id="tabOps">OPS FEED</span><span class="tab" id="tabLog">WORKLOG</span></span><span class="count" id="opsCount"></span></div>
+        <div class="panel-title"><span class="tabs" role="tablist"><button class="tab on" id="tabOps" type="button" role="tab" aria-selected="true" aria-controls="opsList">OPS FEED</button><button class="tab" id="tabLog" type="button" role="tab" aria-selected="false" aria-controls="logList">WORKLOG</button></span><span class="log-tools"><button class="log-clear" id="logClear" type="button" title="Clear the worklog on this HUD">CLEAR</button><span class="count" id="opsCount"></span></span></div>
         <div class="ops-list" id="opsList"><div class="ops-empty">IDLE — NO OPERATIONS YET</div></div>
         <div class="log-list" id="logList"><div class="ops-empty">NOTHING READ, SEARCHED OR EDITED YET</div></div>
       </section>
@@ -685,6 +717,7 @@
           <div><span>TOTAL</span><b id="misTotal">0</b></div>
           <div><span>LAST</span><b id="misLast">—</b></div>
           <div><span>VOICE</span><b id="misVoice">—</b></div>
+          <div id="misCostRow" hidden><span>COST TODAY</span><b id="misCost">—</b></div>
         </div>
         <div class="mis-sum" id="misSum"></div>
         <div class="lt-list" id="ltList"><div class="lt-empty">NO LONG TASKS — SAY "LONG TASK: …"</div></div>
@@ -759,7 +792,7 @@
       <div class="transcript-title">SESSION LOG<kbd>/ TYPE &nbsp; ESC STOP</kbd></div>
       <button class="stop-btn" id="stop" type="button" title="Stop Alfred (Esc)">&#9632;&nbsp;STOP</button>
     </div>
-    <div id="transcript"></div>
+    <div id="transcript" aria-live="polite" aria-relevant="additions"></div>
     <form id="cmdform" autocomplete="off">
       <button id="mic" type="button" style="display:none">&#9679;&nbsp;MIC</button>
       <input id="cmd" placeholder="Type to Alfred — commands work silently too…  ( / to focus )" />
@@ -768,7 +801,7 @@
   </div>
 </div>
 
-<div id="toasts"></div>
+<div id="notices"><div id="asks" role="alert"></div><div id="toasts" role="status"></div></div>
 
 <div id="codestream">
   <div class="cs-bar"><span class="cs-file" id="csFile"></span><span class="cs-mode" id="csMode"></span></div>
@@ -780,7 +813,7 @@
     <div class="vt" id="viewerTitle">VIEWER</div>
     <button id="viewerClose" type="button" title="Close (Esc)">&#10005;&nbsp;CLOSE</button>
   </div>
-  <iframe id="viewerFrame" title="viewer"></iframe>
+  <iframe id="viewerFrame" title="viewer" sandbox="allow-scripts allow-same-origin"></iframe>
 </div>
 
 <div class="scanlines"></div>
@@ -828,11 +861,11 @@
   tickClock(); setInterval(tickClock, 500);
 
   /* ---------- notice toasts ---------- */
-  const toasts = N('toasts');
+  const toasts = N('toasts'), asks = N('asks');
   function toast(text, level, ms) {
     if (!text) return;
     const d = document.createElement('div');
-    d.className = 'toast ' + (level === 'warn' ? 'warn' : level === 'ask' ? 'ask' : 'info');
+    d.className = 'toast ' + (level === 'warn' ? 'warn' : 'info');
     d.textContent = text;
     const kill = () => { d.classList.add('out'); setTimeout(() => d.remove(), 200); };
     d.addEventListener('click', kill);
@@ -840,6 +873,28 @@
     while (toasts.children.length > 4) toasts.firstChild.remove();
     setTimeout(kill, ms || (level === 'warn' ? 6500 : 5000));
   }
+  /* ASK cards live in their own slot: toasts can't evict them. An unanswered ask STAYS until
+     it is answered (a real user line), clicked away, or the core clears it — the core pushes
+     `ask` as state (survives a reconnect; the replay is deduped by text) and sends
+     {type:'ask', text:''} to clear it. Synthetic harness prompts ("[business shift …]",
+     "[restart notice …]") also arrive as role=user and must NOT wipe an open question. */
+  const ASK_MAX = 3;
+  const askSeen = new Set();   // texts currently shown or already dismissed/answered: a replay on reconnect is ignored
+  function askCard(text) {
+    if (!text) { clearAsks(); return; }   // core cleared the ask (answered / superseded)
+    if (askSeen.has(text)) return;        // replayed on reconnect (or a dupe): already shown, maybe already dismissed
+    askSeen.add(text);
+    if (askSeen.size > 20) askSeen.delete(askSeen.values().next().value);
+    const d = document.createElement('div');
+    d.className = 'toast ask';
+    d.dataset.text = text;
+    d.textContent = text;
+    d.addEventListener('click', () => { d.classList.add('out'); setTimeout(() => d.remove(), 200); });
+    asks.appendChild(d);
+    while (asks.children.length > ASK_MAX) asks.firstChild.remove();
+  }
+  function clearAsks() { asks.replaceChildren(); }
+  const isSyntheticUserLine = text => /^\[/.test(String(text || '').trim());   // every harness-made prompt starts with '['
 
   /* ---------- state ---------- */
   let state = 'idle';
@@ -1011,13 +1066,11 @@
   }
 
   /* ---------- metrics (TELEMETRY latency bar) ---------- */
-  let metricsSeen = false;
   const e2eEl = N('e2e'), bStt = N('bStt'), bRoute = N('bRoute'), bTtfw = N('bTtfw'), bRest = N('bRest'), bBudget = N('bBudget');
   const mStt = N('mStt'), mRoute = N('mRoute'), mTtfw = N('mTtfw');
   const msTxt = v => (v == null || isNaN(v)) ? '—' : Math.round(v) + ' ms';
   const budgetCls = ms => ms <= 800 ? 'ok' : ms <= 1500 ? 'warn' : 'bad';
   function applyMetrics(m) {
-    metricsSeen = true;
     const stt = Math.max(0, +m.stt || 0), route = Math.max(0, +m.route || 0), ttfw = Math.max(0, +m.ttfw || 0);
     const sum = stt + route + ttfw;
     const e2e = m.e2e != null && !isNaN(+m.e2e) ? Math.max(0, +m.e2e) : sum;
@@ -1062,10 +1115,11 @@
     let running = 0;
     const now = Date.now();
     for (const t of list.slice(0, 14)) {
-      const st = ST_LABEL[t.status] ? t.status : 'done';
+      const known = !!ST_LABEL[t.status];
+      const st = known ? t.status : String(t.status || 'unknown').toLowerCase();
       if (st === 'running') running++;
       const row = document.createElement('div');
-      row.className = 'task ' + st;
+      row.className = 'task ' + (known ? st : 'other');   // unknown status: label as-is, no DONE styling
       row.title = t.text || '';
       const mark = document.createElement('span'); mark.className = 'mark';
       const mid = document.createElement('div');
@@ -1088,7 +1142,7 @@
         const endMs = t.ended ? t.ended * 1000 : null;
         time.textContent = (startMs && endMs) ? fmtDur(endMs - startMs) : '';
       }
-      const stl = document.createElement('span'); stl.className = 'st'; stl.textContent = ST_LABEL[st];
+      const stl = document.createElement('span'); stl.className = 'st'; stl.textContent = known ? ST_LABEL[st] : st.toUpperCase();
       right.append(time, stl);
       row.append(mark, mid, right);
       frag.appendChild(row);
@@ -1159,6 +1213,7 @@
   const csFile = N('csFile'), csMode = N('csMode'), csBody = N('csBody');
   let csTimer = null;
   function showEdit(msg) {
+    if (logDenied(msg)) return;   // secrets file: neither the overlay nor the worklog shows it
     csFile.textContent = msg.file || '';
     csMode.textContent = msg.mode || 'EDIT';
     const rows = [...(msg.removed || []).map(l => ['del', '- ' + l]),
@@ -1181,9 +1236,27 @@
   }
 
   /* ---------- worklog (persistent, expandable — the overlay fades, this stays) ---------- */
-  const logList = N('logList'), tabOps = N('tabOps'), tabLog = N('tabLog');
+  const logList = N('logList'), tabOps = N('tabOps'), tabLog = N('tabLog'), logClear = N('logClear');
   let logN = 0, logTab = false;
+  const LOG_MAX = 200;
+  // client-side denylist, belt-and-braces to the core's scrub: an edit/read of a secrets
+  // file never lands in this list (the phone HUD shows it too). Concrete basenames only —
+  // a research row whose query merely mentions "wallet" is not a secret. The core sends the
+  // file field as a basename (edits) or "Tool · target" (research); the mock sends full paths.
+  const LOG_DENY = ['alfred-solana.json', '.spotify-token.json', '.tmp-refup-state.json', '.env', 'deployer.json',
+                    '.telegram-state.json', '.accounts.json', 'telegram_config.json', 'spotify_config.json',
+                    '.remote-key', '.cloud-session', '.browser-profile'];
+  const logDenied = msg => {
+    const raw = String(msg.file || '').replace(/^\S+ · /, '').trim();      // drop the "Read · " tool prefix
+    if (!raw || /\s/.test(raw)) return false;                               // a query / command / description, not a path
+    const p = raw.toLowerCase().replace(/\\/g, '/');
+    const base = p.slice(p.lastIndexOf('/') + 1);
+    if (LOG_DENY.includes(base) || base.startsWith('.env.')) return true;
+    return /(^|\/)system\/wallet\/[^/]+\.json$/.test(p);                     // any keypair-shaped json under system/wallet
+  };
+  const LOG_EMPTY = 'NOTHING READ, SEARCHED OR EDITED YET';
   function addLog(msg, rows) {
+    if (logDenied(msg)) return;
     if (!logN) logList.replaceChildren();
     logN++;
     const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -1199,19 +1272,27 @@
     rows.forEach(([cls, text]) => { const r = document.createElement('div'); r.className = cls; r.textContent = text; b.appendChild(r); });
     d.addEventListener('click', () => d.classList.toggle('open'));
     logList.appendChild(d);
-    while (logList.children.length > 200) logList.removeChild(logList.firstChild);
+    while (logList.children.length > LOG_MAX) logList.removeChild(logList.firstChild);
     if (logTab) logList.scrollTop = logList.scrollHeight;
     if (!logTab) tabLog.textContent = 'WORKLOG ' + logN;
+  }
+  function clearLog() {
+    logN = 0;
+    const e = document.createElement('div'); e.className = 'ops-empty'; e.textContent = LOG_EMPTY;
+    logList.replaceChildren(e);
+    tabLog.textContent = 'WORKLOG';
   }
   function showTab(log) {
     logTab = log;
     document.body.classList.toggle('log-on', log);
     tabOps.classList.toggle('on', !log); tabLog.classList.toggle('on', log);
+    tabOps.setAttribute('aria-selected', String(!log)); tabLog.setAttribute('aria-selected', String(log));
     opsList.classList.toggle('off', log); logList.classList.toggle('on', log);
     if (log) { tabLog.textContent = 'WORKLOG'; logList.scrollTop = logList.scrollHeight; }
   }
   tabOps.addEventListener('click', () => showTab(false));
   tabLog.addEventListener('click', () => showTab(true));
+  logClear.addEventListener('click', clearLog);
 
   /* ---------- NOW strip — what Alfred is on right now ---------- */
   const nowEl = N('now'), nowKind = N('nowKind'), nowTask = N('nowTask'), nowDetail = N('nowDetail'), nowSteer = N('nowSteer'), nowElapsed = N('nowEl');
@@ -1240,6 +1321,11 @@
     N('misTotal').textContent = m.shifts_total != null ? m.shifts_total : 0;
     N('misLast').textContent = m.last_shift ? hhmm(m.last_shift) : '—';
     N('misVoice').textContent = m.speaking ? 'ALOUD' : 'PHONE';
+    // cost_today (USD, may be absent on older cores): shown only when the core sends a number
+    const cost = m.cost_today;
+    const hasCost = cost != null && cost !== '' && !isNaN(+cost);
+    N('misCostRow').hidden = !hasCost;
+    N('misCost').textContent = hasCost ? '$' + (+cost).toFixed(2) : '—';
     misSum.textContent = m.last_summary || '';
     misNextAt = (m.next_in != null && misState === 'active') ? Date.now() + m.next_in * 1000 : null;
     tickMission();
@@ -1284,7 +1370,10 @@
     stick = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 40;
   });
   function addLine(role, text) {
-    if (role === 'user') turnsEl.textContent = ++turns;
+    if (role === 'user') {
+      turnsEl.textContent = ++turns;
+      if (!isSyntheticUserLine(text)) clearAsks();   // a REAL human line answers/steers any open ASK; "[shift…]" prompts don't
+    }
     const ts = new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     const div = document.createElement('div');
     div.className = 'line ' + (role === 'user' ? 'user' : 'alfred');
@@ -1372,7 +1461,6 @@
     mode:       m => setMode(m.value),
     transcript: m => addLine(m.role, m.text),
     level:      m => { micLevel = +m.value || 0; },
-    latency:    m => { if (!metricsSeen && m.value != null) mTtfw.textContent = Math.round(m.value * 1000) + ' ms'; },
     metrics:    m => applyMetrics(m),
     activity:   m => setActivity(m.text),
     work:       m => addOp(m.text),
@@ -1384,14 +1472,25 @@
     notice:     m => toast(m.text, m.level),
     focus:      m => applyFocus(m),
     mission:    m => applyMission(m),
-    ask:        m => toast(m.text, 'ask', 25000),
+    ask:        m => askCard(m.text),
     authfail:   () => { badKey = true; },
     tts:        m => playTts(m.data),
     reload:     () => location.reload(),
   };
+  // reconnect: exponential backoff 1.5 s → 3 → 6 → 12 (reset on open); a phone waking
+  // up (visibilitychange → visible) retries at once instead of waiting out the timer
+  const BACKOFF_MS = [1500, 3000, 6000, 12000];
+  let backoffN = 0, reconnectTimer = null;
+  function scheduleReconnect(ms) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = setTimeout(connect, ms);
+  }
   function connect() {
-    try { ws = new WebSocket(WS_URL); } catch { return setTimeout(connect, 3000); }
+    clearTimeout(reconnectTimer); reconnectTimer = null;
+    if (ws && (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN)) return;
+    try { ws = new WebSocket(WS_URL); } catch { return scheduleReconnect(3000); }
     ws.onopen = () => {
+      backoffN = 0;
       if (REMOTE) {
         badKey = false;
         send({ type: 'auth', key: accessKey() });
@@ -1410,7 +1509,9 @@
       stopBtn.classList.remove('armed');
       if (wasOpen && !lostToasted) { toast(badKey ? 'ACCESS KEY REJECTED' : 'LINK LOST — RECONNECTING', 'warn'); lostToasted = true; }
       if (badKey) localStorage.removeItem('alfred_key');  // reprompt on the next attempt
-      setTimeout(connect, badKey ? 3000 : 1500);
+      const wait = BACKOFF_MS[Math.min(backoffN, BACKOFF_MS.length - 1)];
+      backoffN++;
+      scheduleReconnect(badKey ? 3000 : wait);
     };
     ws.onmessage = (ev) => {
       let msg;
@@ -1420,6 +1521,12 @@
     };
   }
   connect();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || wsOpen()) return;
+    backoffN = 0;
+    connect();          // the phone just woke: don't sit out a 12 s timer
+  });
+  addEventListener('online', () => { if (!wsOpen()) { backoffN = 0; connect(); } });
 
   /* ---------- phone audio: hands-free mic + spoken replies (remote only) ---------- */
   const micBtn = N('mic');
