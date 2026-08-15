@@ -400,7 +400,8 @@
     <div class="top-right">
       <div class="clock" id="clock">--:--:--</div>
       <div class="model-switch" id="modelSwitch">
-        <button class="model-btn active" id="btnCloud" data-target="cloud">CLOUD&nbsp;·&nbsp;CLAUDE</button>
+        <button class="model-btn auto active" id="btnAuto" data-target="auto">AUTO</button>
+        <button class="model-btn" id="btnCloud" data-target="cloud">CLOUD&nbsp;·&nbsp;CLAUDE</button>
         <button class="model-btn local" id="btnLocal" data-target="local">LOCAL&nbsp;·&nbsp;QWEN</button>
       </div>
       <button id="btnSys" type="button">SYS</button>
@@ -546,6 +547,7 @@
   const hintEl = document.getElementById('hint');
   const activityEl = document.getElementById('activity');
   const brainLabel = document.getElementById('brainLabel');
+  const btnAuto = document.getElementById('btnAuto');
   const btnCloud = document.getElementById('btnCloud');
   const btnLocal = document.getElementById('btnLocal');
   const stopBtn = document.getElementById('stop');
@@ -591,10 +593,15 @@
     activityEl.classList.toggle('on', !!text);
     if (text) flashTool(text);
   }
-  function setModel(m) {
-    model = m;
+  let mode = 'auto';
+  function setMode(m) {
+    mode = m;
+    btnAuto.classList.toggle('active', m === 'auto');
     btnCloud.classList.toggle('active', m === 'cloud');
     btnLocal.classList.toggle('active', m === 'local');
+  }
+  function setModel(m) {
+    model = m;
     brainLabel.textContent = m === 'cloud' ? 'CLAUDE' : 'QWEN LOCAL';
     latEl.textContent = '—';
     applyReactorClass();
@@ -835,6 +842,7 @@
       const msg = JSON.parse(ev.data);
       if (msg.type === 'state') { serverState = msg.value; setState(msg.value); }
       if (msg.type === 'model') setModel(msg.value);
+      if (msg.type === 'mode') setMode(msg.value);
       if (msg.type === 'transcript') addLine(msg.role, msg.text);
       if (msg.type === 'level') micLevel = msg.value;
       if (msg.type === 'latency') latEl.textContent = msg.value + 's';
@@ -960,6 +968,7 @@
   }
 
   /* ---------- model buttons ---------- */
+  btnAuto.addEventListener('click', () => send({ type: 'switch', target: 'auto' }));
   btnCloud.addEventListener('click', () => send({ type: 'switch', target: 'cloud' }));
   btnLocal.addEventListener('click', () => send({ type: 'switch', target: 'local' }));
 
