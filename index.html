@@ -264,6 +264,10 @@
   .task.interrupted .mark { background: transparent; color: var(--amber); animation: spin 1.6s linear infinite; }
   .task.interrupted .mark::before { content: '\21BB'; }
   .task.interrupted .right .st { color: var(--amber); }
+  .task.resumed { border-left-color: var(--green); }
+  .task.resumed .mark { background: transparent; color: var(--green); }
+  .task.resumed .mark::before { content: '\21BB'; }
+  .task.resumed .right .st { color: var(--green); }
   .task.abandoned { opacity: .38; border-left-color: rgba(207,239,255,.2); }
   .task.abandoned .mark { background: transparent; color: rgba(207,239,255,.5); }
   .task.abandoned .mark::before { content: '\2014'; }
@@ -1097,7 +1101,7 @@
   /* ---------- tasks (the ledger) ---------- */
   const taskList = N('taskList'), tasksCount = N('tasksCount');
   const runningTimers = new Map();   // task id → elapsed <span>, ticked once a second
-  const ST_LABEL = { running: 'RUNNING', done: 'DONE', failed: 'FAILED', stopped: 'STOPPED', interrupted: 'RESUMING', abandoned: 'ABANDONED' };
+  const ST_LABEL = { running: 'RUNNING', done: 'DONE', failed: 'FAILED', stopped: 'STOPPED', interrupted: 'RESUMING', abandoned: 'ABANDONED', resumed: 'RESUMED' };
   function fmtDur(ms) {
     if (ms == null || isNaN(ms) || ms < 0) return '—';
     const s = Math.floor(ms / 1000);
